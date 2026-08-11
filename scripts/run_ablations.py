@@ -16,7 +16,7 @@ def main() -> None:
     p.add_argument("--config", default=None, help="optional YAML config")
     p.add_argument("--seeds", type=int, nargs="+", default=None)
     p.add_argument("--rungs", nargs="+", default=None,
-                   help=f"subset of: 0_lgbm {' '.join(RUNGS)}")
+                   help=f"subset of: 0_lgbm 0_xgb {' '.join(RUNGS)}")
     p.add_argument("--out", default="results")
     args = p.parse_args()
 

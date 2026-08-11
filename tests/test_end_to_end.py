@@ -1,7 +1,7 @@
 """Smoke test: the full stack runs on a small synthetic sample."""
 import numpy as np
 
-from ipo_model.baselines import lgbm
+from ipo_model.baselines import lgbm, xgb
 from ipo_model.training import loop
 
 
@@ -13,11 +13,21 @@ def _fast_cfg(cfg):
         "train.seeds": (0,),
         "lgbm.num_boost_round": 30,
         "lgbm.early_stopping_rounds": 10,
+        "xgb.num_boost_round": 30,
+        "xgb.early_stopping_rounds": 10,
     })
 
 
 def test_lgbm_baseline_runs(fs, cfg):
     res = lgbm.run(_fast_cfg(cfg), fs, verbose=False)
+    assert len(res.fold_results) == 2
+    assert np.isfinite(res.pooled["mae"])
+    for r in res.fold_results:
+        assert (np.diff(r.q_pred, axis=1) >= 0).all()
+
+
+def test_xgb_baseline_runs(fs, cfg):
+    res = xgb.run(_fast_cfg(cfg), fs, verbose=False)
     assert len(res.fold_results) == 2
     assert np.isfinite(res.pooled["mae"])
     for r in res.fold_results:

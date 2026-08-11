@@ -3,5 +3,6 @@ pandas
 scipy
 torch
 lightgbm
+xgboost
 pyyaml
 pytest

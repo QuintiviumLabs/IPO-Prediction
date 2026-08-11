@@ -99,12 +99,32 @@ class LGBMConfig:
 
 
 @dataclass
+class XGBConfig:
+    params: dict[str, Any] = field(default_factory=lambda: {
+        "objective": "reg:pseudohubererror",
+        "huber_slope": 1.0,
+        "learning_rate": 0.05,
+        "max_leaves": 31,
+        "grow_policy": "lossguide",
+        "tree_method": "hist",
+        "min_child_weight": 20,
+        "colsample_bytree": 0.8,
+        "subsample": 0.8,
+        "reg_lambda": 1.0,
+        "verbosity": 0,
+    })
+    num_boost_round: int = 2000
+    early_stopping_rounds: int = 50
+
+
+@dataclass
 class Config:
     data: DataConfig = field(default_factory=DataConfig)
     split: SplitConfig = field(default_factory=SplitConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     lgbm: LGBMConfig = field(default_factory=LGBMConfig)
+    xgb: XGBConfig = field(default_factory=XGBConfig)
 
     @property
     def main_horizon(self) -> int:
@@ -152,7 +172,7 @@ def _flatten(d: dict, prefix: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k, v in d.items():
         key = f"{prefix}{k}"
-        if isinstance(v, dict) and key not in ("lgbm.params",):
+        if isinstance(v, dict) and key not in ("lgbm.params", "xgb.params"):
             out.update(_flatten(v, prefix=f"{key}."))
         else:
             out[key] = tuple(v) if isinstance(v, list) else v

@@ -51,8 +51,8 @@ pip install -e .
 # synthetic data in the expected schema (~4000 IPOs, planted signal)
 python scripts/make_synthetic_data.py --out data
 
-# ablation 0: LightGBM on engineered features — the bar to clear
-python scripts/run_baseline.py --data data
+# ablation 0: trees on engineered features — the bar to clear
+python scripts/run_baseline.py --data data --engine both   # LightGBM + XGBoost
 
 # full three-arm model (V1); add --attn --film for V2
 python scripts/run_full.py --data data --seeds 0 1 2
@@ -68,6 +68,7 @@ pytest
 | rung | what it tests |
 |---|---|
 | 0_lgbm | engineered features + trees: do sequences add anything at all? |
+| 0_xgb | same features, second tree engine — is the baseline engine-robust? |
 | 1_static | deal characteristics alone |
 | 2_static+gpr_level | does the *level* of GPR matter? |
 | 3_static+gpr_seq | does GPR *dynamics* beat its level? |
@@ -109,7 +110,7 @@ ipo_model/
   data/splits.py         purged walk-forward CV
   models/model.py        three arms, FiLM, quantile heads
   training/{losses,metrics,loop}.py
-  baselines/lgbm.py      ablation 0
+  baselines/{lgbm,xgb}.py  ablation 0 (two tree engines, shared fold loop)
   ablation.py            the ladder
 scripts/                 CLI entry points
 tests/                   leakage/purging properties, model mechanics, smoke tests

@@ -4,7 +4,8 @@ Each rung is a named set of config overrides on the same data, folds, seeds
 and metrics, so differences between rungs are attributable to the component
 being toggled:
 
-  0  lgbm            LightGBM on engineered features (the bar to clear)
+  0  lgbm / xgb      trees on engineered features (the bar to clear;
+                     two engines as a robustness check on the baseline)
   1  static          static arm only
   2  static+gpr_lvl  + current GPR level
   3  static+gpr_seq  + GPR temporal encoder (GRU)
@@ -19,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from ipo_model.baselines import lgbm
+from ipo_model.baselines import lgbm, xgb
 from ipo_model.config import Config
 from ipo_model.data.features import FeatureSet
 from ipo_model.training import loop
@@ -44,13 +45,15 @@ REPORT_METRICS = ["rank_ic", "hit_rate", "decile_spread", "mae", "pinball", "cov
 
 def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
                out_dir: str | Path = "results", verbose: bool = True) -> pd.DataFrame:
-    names = rungs if rungs is not None else ["0_lgbm", *RUNGS.keys()]
+    names = rungs if rungs is not None else ["0_lgbm", "0_xgb", *RUNGS.keys()]
     rows = []
     for name in names:
         if verbose:
             print(f"\n=== {name} ===")
         if name == "0_lgbm":
             res = lgbm.run(cfg, fs, verbose=verbose)
+        elif name == "0_xgb":
+            res = xgb.run(cfg, fs, verbose=verbose)
         else:
             res = loop.run(cfg.override(**RUNGS[name]), fs, verbose=verbose)
         row: dict[str, Any] = {"rung": name}
