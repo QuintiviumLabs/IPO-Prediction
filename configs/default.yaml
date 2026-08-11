@@ -1,0 +1,32 @@
+# Optional YAML overrides — every key mirrors ipo_model/config.py.
+# Anything omitted keeps the dataclass default. Pass with --config.
+
+data:
+  horizons: [1, 5, 21]      # trading days; last = main target
+  market_adjust: true
+  panel_size: 20
+  panel_seq_len: 21
+  gpr_window: 21
+  min_bookrunner_deals: 20
+
+split:
+  n_folds: 5
+  min_train_frac: 0.35
+  val_frac: 0.15
+  embargo_days: 5
+
+model:
+  use_panel: true
+  use_gpr: true
+  gpr_mode: lstm            # level | engineered | lstm
+  panel_pooling: mean       # mean | attn
+  gating: none              # none | film
+  dropout: 0.2
+
+train:
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 128
+  max_epochs: 200
+  patience: 20
+  seeds: [0, 1, 2, 3, 4]

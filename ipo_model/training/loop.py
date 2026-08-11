@@ -1,0 +1,163 @@
+"""Training and evaluation of the three-arm model over purged walk-forward folds.
+
+Per fold: fit a FoldScaler on the training window, train one model per seed
+with early stopping on the (purged) validation loss, average the quantile
+forecasts across seeds (ensemble), evaluate the ensemble on the test block.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+
+from ipo_model.config import Config
+from ipo_model.data.features import FeatureSet
+from ipo_model.data.preprocess import FoldScaler
+from ipo_model.data.splits import Fold, purged_walk_forward
+from ipo_model.models.model import ThreeArmModel
+from ipo_model.training.losses import multi_horizon_loss
+from ipo_model.training.metrics import aggregate_folds, evaluate
+
+
+@dataclass
+class FoldResult:
+    fold: int
+    test_idx: np.ndarray
+    q_pred: np.ndarray          # (n_test, Q) ensemble quantile forecasts, main horizon
+    per_seed_val_loss: list[float]
+    metrics: dict[str, float]
+
+
+@dataclass
+class RunResult:
+    fold_results: list[FoldResult]
+    summary: dict[str, tuple[float, float]]   # metric -> (mean, std) across folds
+    pooled: dict[str, float]                  # metrics on all OOS rows pooled
+
+
+def _tensors(fs: FeatureSet, scaler: FoldScaler, cfg: Config,
+             device: str) -> dict[str, torch.Tensor]:
+    binary, bk = scaler.static_matrix(fs)
+    seq, scal = scaler.panel(fs)
+    t = {
+        "static_binary": torch.tensor(binary),
+        "static_bk": torch.tensor(bk),
+        "panel_seq": torch.tensor(seq),
+        "panel_len": torch.tensor(fs.panel_len),
+        "panel_scalars": torch.tensor(scal),
+        "panel_valid": torch.tensor(fs.panel_valid),
+        "gpr_seq": torch.tensor(scaler.gpr_sequences(fs)),
+        "gpr_feats": torch.tensor(scaler.gpr_features(fs)),
+    }
+    return {k: v.to(device) for k, v in t.items()}
+
+
+def _slice(tensors: dict[str, torch.Tensor], idx: np.ndarray) -> dict[str, torch.Tensor]:
+    ix = torch.as_tensor(idx, dtype=torch.long, device=next(iter(tensors.values())).device)
+    return {k: v[ix] for k, v in tensors.items()}
+
+
+def _build_model(cfg: Config, tensors: dict[str, torch.Tensor]) -> ThreeArmModel:
+    return ThreeArmModel(
+        cfg.model,
+        n_binary=tensors["static_binary"].shape[1],
+        n_bookrunners=tensors["static_bk"].shape[1],
+        n_panel_scalars=tensors["panel_scalars"].shape[2],
+        n_gpr_feats=tensors["gpr_feats"].shape[1],
+        horizons=tuple(sorted(cfg.data.horizons)),
+    )
+
+
+def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
+              targets: dict[int, torch.Tensor], fold: Fold,
+              seed: int) -> tuple[ThreeArmModel, float]:
+    torch.manual_seed(seed)
+    rng = np.random.default_rng(seed)
+    device = cfg.train.device
+    model = _build_model(cfg, tensors).to(device)
+    opt = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr,
+                            weight_decay=cfg.train.weight_decay)
+
+    train_t = _slice(tensors, fold.train_idx)
+    val_t = _slice(tensors, fold.val_idx)
+    y_train = {h: t[fold.train_idx] for h, t in targets.items()}
+    y_val = {h: t[fold.val_idx] for h, t in targets.items()}
+
+    n = len(fold.train_idx)
+    best_val, best_state, patience_left = float("inf"), None, cfg.train.patience
+    for _epoch in range(cfg.train.max_epochs):
+        model.train()
+        perm = rng.permutation(n)
+        for start in range(0, n, cfg.train.batch_size):
+            b = perm[start: start + cfg.train.batch_size]
+            bt = torch.as_tensor(b, dtype=torch.long, device=device)
+            preds = model({k: v[bt] for k, v in train_t.items()})
+            loss = multi_horizon_loss(
+                preds, {h: y[bt] for h, y in y_train.items()},
+                cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
+            )
+            opt.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
+            opt.step()
+
+        model.eval()
+        with torch.no_grad():
+            val_loss = float(multi_horizon_loss(
+                model(val_t), y_val,
+                cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
+            ))
+        if val_loss < best_val - 1e-6:
+            best_val = val_loss
+            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            patience_left = cfg.train.patience
+        else:
+            patience_left -= 1
+            if patience_left <= 0:
+                break
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    model.eval()
+    return model, best_val
+
+
+def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
+    folds = purged_walk_forward(fs.dates, fs.label_end, cfg.split)
+    device = cfg.train.device
+    main_h = cfg.main_horizon
+    results: list[FoldResult] = []
+
+    for k, fold in enumerate(folds):
+        scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
+        tensors = _tensors(fs, scaler, cfg, device)
+        targets = {h: torch.tensor(y, dtype=torch.float32, device=device)
+                   for h, y in fs.y.items()}
+
+        preds_per_seed, val_losses = [], []
+        for seed in cfg.train.seeds:
+            model, val_loss = train_one(cfg, tensors, targets, fold, seed)
+            with torch.no_grad():
+                q = model(_slice(tensors, fold.test_idx))[main_h].cpu().numpy()
+            preds_per_seed.append(q)
+            val_losses.append(val_loss)
+
+        q_ens = np.mean(preds_per_seed, axis=0)
+        y_test = fs.y[main_h][fold.test_idx]
+        m = evaluate(y_test, q_ens, cfg.model.quantiles)
+        results.append(FoldResult(fold=k, test_idx=fold.test_idx, q_pred=q_ens,
+                                  per_seed_val_loss=val_losses, metrics=m))
+        if verbose:
+            print(f"  fold {k}: n_test={len(fold.test_idx)} "
+                  f"IC={m['rank_ic']:+.3f} hit={m['hit_rate']:.3f} "
+                  f"spread={m['decile_spread']:+.4f} MAE={m['mae']:.4f} "
+                  f"cov={m['coverage']:.2f}")
+
+    pooled_y = np.concatenate([fs.y[main_h][r.test_idx] for r in results])
+    pooled_q = np.concatenate([r.q_pred for r in results])
+    return RunResult(
+        fold_results=results,
+        summary=aggregate_folds([r.metrics for r in results]),
+        pooled=evaluate(pooled_y, pooled_q, cfg.model.quantiles),
+    )

@@ -1,0 +1,26 @@
+[project]
+name = "ipo-model"
+version = "0.1.0"
+description = "IPO aftermarket return prediction: three-arm deep model (static / recent-IPO panel / GPR) with a LightGBM engineered-features baseline"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "torch",
+    "lightgbm",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["ipo_model*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
