@@ -69,6 +69,7 @@ pytest
 |---|---|
 | 0_lgbm | engineered features + trees: do sequences add anything at all? |
 | 0_xgb | same features, second tree engine — is the baseline engine-robust? |
+| 0_lgbm_raw / 0_xgb_raw | trees on the full flattened inputs (every panel return + raw GPR window + the summaries): is the deep model's edge the *information* or the *sequential encoder*? |
 | 1_static | deal characteristics alone |
 | 2_static+gpr_level | does the *level* of GPR matter? |
 | 3_static+gpr_seq | does GPR *dynamics* beat its level? |

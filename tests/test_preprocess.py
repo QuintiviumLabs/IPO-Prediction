@@ -1,6 +1,6 @@
 import numpy as np
 
-from ipo_model.data.preprocess import FoldScaler, engineered_table
+from ipo_model.data.preprocess import FoldScaler, engineered_table, raw_table
 
 
 def test_rare_bookrunner_bucketing(fs, cfg):
@@ -32,3 +32,19 @@ def test_engineered_table_shape_and_names(fs, cfg):
     assert X.notna().all().all()
     for col in ["panel_mean_cumret", "panel_mean_pop", "ipo_count_90d", "gpr_level"]:
         assert col in X.columns
+
+
+def test_raw_table_contains_full_inputs(fs, cfg):
+    scaler = FoldScaler.fit(fs, np.arange(len(fs) // 2), cfg.data)
+    X = raw_table(fs, scaler)
+    K, T = fs.panel_seq.shape[1], fs.panel_seq.shape[2]
+    W = fs.gpr_seq.shape[1]
+    base = engineered_table(fs, scaler)
+    assert len(X) == len(fs)
+    assert X.notna().all().all()
+    # engineered summaries + K*(T + len/age/pop) + W raw GPR columns
+    assert X.shape[1] == base.shape[1] + K * (T + 3) + W
+    # raw columns must match the tensors the deep model sees (unscaled)
+    assert (X["p00_r00"].to_numpy() == fs.panel_seq[:, 0, 0]).all()
+    assert (X[f"gpr_m01"].to_numpy() == fs.gpr_seq[:, -1]).all()
+    assert (X["p03_len"].to_numpy() == fs.panel_len[:, 3]).all()

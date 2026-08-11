@@ -13,7 +13,7 @@ import pandas as pd
 
 from ipo_model.config import Config
 from ipo_model.data.features import FeatureSet
-from ipo_model.data.preprocess import FoldScaler, engineered_table
+from ipo_model.data.preprocess import FoldScaler, engineered_table, raw_table
 from ipo_model.data.splits import purged_walk_forward
 from ipo_model.training.loop import FoldResult, RunResult
 from ipo_model.training.metrics import aggregate_folds, evaluate
@@ -26,8 +26,12 @@ QuantilePredictor = Callable[
 ]
 
 
+TABLES = {"engineered": engineered_table, "raw": raw_table}
+
+
 def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
-              verbose: bool = True) -> RunResult:
+              features: str = "engineered", verbose: bool = True) -> RunResult:
+    table_fn = TABLES[features]
     folds = purged_walk_forward(fs.dates, fs.label_end, cfg.split)
     y = fs.y[cfg.main_horizon]
     qs = sorted(cfg.model.quantiles)
@@ -36,7 +40,7 @@ def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
 
     for k, fold in enumerate(folds):
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
-        X = engineered_table(fs, scaler)
+        X = table_fn(fs, scaler)
         q_pred = predict_quantiles(
             X.iloc[fold.train_idx], y[fold.train_idx],
             X.iloc[fold.val_idx], y[fold.val_idx],

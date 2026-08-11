@@ -16,7 +16,8 @@ from ipo_model.data.features import FeatureSet
 from ipo_model.training.loop import RunResult
 
 
-def run(cfg: Config, fs: FeatureSet, seed: int = 0, verbose: bool = True) -> RunResult:
+def run(cfg: Config, fs: FeatureSet, seed: int = 0, features: str = "engineered",
+        verbose: bool = True) -> RunResult:
     import xgboost as xgb
 
     def predict_quantiles(X_train: pd.DataFrame, y_train: np.ndarray,
@@ -42,4 +43,4 @@ def run(cfg: Config, fs: FeatureSet, seed: int = 0, verbose: bool = True) -> Run
                 dtest, iteration_range=(0, booster.best_iteration + 1))
         return q_pred
 
-    return run_folds(cfg, fs, predict_quantiles, verbose=verbose)
+    return run_folds(cfg, fs, predict_quantiles, features=features, verbose=verbose)

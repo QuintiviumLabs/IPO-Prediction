@@ -14,6 +14,9 @@ def main() -> None:
     p.add_argument("--data", default="data")
     p.add_argument("--config", default=None, help="optional YAML config")
     p.add_argument("--engine", choices=[*ENGINES, "both"], default="lgbm")
+    p.add_argument("--features", choices=["engineered", "raw", "both"],
+                   default="engineered",
+                   help="engineered summaries, or the full flattened inputs")
     args = p.parse_args()
 
     cfg = Config.from_yaml(args.config) if args.config else Config()
@@ -21,12 +24,15 @@ def main() -> None:
     print(f"{len(fs)} IPOs with full {cfg.main_horizon}d labels; "
           f"target = {cfg.main_horizon}d excess log return from offer price")
     engines = list(ENGINES) if args.engine == "both" else [args.engine]
+    feature_sets = (["engineered", "raw"] if args.features == "both"
+                    else [args.features])
     for name in engines:
-        print(f"\n=== {name} ===")
-        res = ENGINES[name](cfg, fs)
-        print("\nAcross folds (mean ± std) | pooled OOS:")
-        for k, (mu, sd) in res.summary.items():
-            print(f"  {k:>18s}: {mu:+.4f} ± {sd:.4f} | {res.pooled[k]:+.4f}")
+        for features in feature_sets:
+            print(f"\n=== {name} ({features}) ===")
+            res = ENGINES[name](cfg, fs, features=features)
+            print("\nAcross folds (mean ± std) | pooled OOS:")
+            for k, (mu, sd) in res.summary.items():
+                print(f"  {k:>18s}: {mu:+.4f} ± {sd:.4f} | {res.pooled[k]:+.4f}")
 
 
 if __name__ == "__main__":

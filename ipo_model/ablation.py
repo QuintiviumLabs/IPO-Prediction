@@ -6,6 +6,11 @@ being toggled:
 
   0  lgbm / xgb      trees on engineered features (the bar to clear;
                      two engines as a robustness check on the baseline)
+  0r lgbm_raw /      trees on the FULL flattened inputs (every panel return,
+     xgb_raw         raw GPR window, plus the engineered summaries): if these
+                     match the deep model, sequences matter but the encoder
+                     doesn't; if they fail where the deep model wins, the
+                     sequential inductive bias is doing the work
   1  static          static arm only
   2  static+gpr_lvl  + current GPR level
   3  static+gpr_seq  + GPR temporal encoder (GRU)
@@ -45,15 +50,20 @@ REPORT_METRICS = ["rank_ic", "hit_rate", "decile_spread", "mae", "pinball", "cov
 
 def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
                out_dir: str | Path = "results", verbose: bool = True) -> pd.DataFrame:
-    names = rungs if rungs is not None else ["0_lgbm", "0_xgb", *RUNGS.keys()]
+    tree_rungs = {
+        "0_lgbm": (lgbm, "engineered"),
+        "0_xgb": (xgb, "engineered"),
+        "0_lgbm_raw": (lgbm, "raw"),
+        "0_xgb_raw": (xgb, "raw"),
+    }
+    names = rungs if rungs is not None else [*tree_rungs, *RUNGS.keys()]
     rows = []
     for name in names:
         if verbose:
             print(f"\n=== {name} ===")
-        if name == "0_lgbm":
-            res = lgbm.run(cfg, fs, verbose=verbose)
-        elif name == "0_xgb":
-            res = xgb.run(cfg, fs, verbose=verbose)
+        if name in tree_rungs:
+            engine, features = tree_rungs[name]
+            res = engine.run(cfg, fs, features=features, verbose=verbose)
         else:
             res = loop.run(cfg.override(**RUNGS[name]), fs, verbose=verbose)
         row: dict[str, Any] = {"rung": name}
