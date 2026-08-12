@@ -6,3 +6,4 @@ lightgbm
 xgboost
 pyyaml
 pytest
+xlrd
