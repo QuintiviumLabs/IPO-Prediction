@@ -14,18 +14,23 @@ from typing import Any
 @dataclass
 class DataConfig:
     # Target definition: log return from offer price to the close on the
-    # `horizon`-th trading day after the first close, in excess of the market
-    # index over the same span (market_adjust=True).
-    horizons: tuple[int, ...] = (1, 5, 21)   # trading days; last one is the main target
+    # h-th trading day (h=1 is the first close), in excess of the market
+    # index over the same span (market_adjust=True). 1d / 3d / 1w / 1m.
+    horizons: tuple[int, ...] = (1, 3, 5, 21)   # trading days; last is the main target
     market_adjust: bool = True
-    # Recent-IPO panel
-    panel_size: int = 20                     # number of preceding IPOs
-    panel_seq_len: int = 21                  # up to this many event-time daily returns each
-    # GPR window
-    gpr_window: int = 21                     # trading days of GPR history for the encoder
+    # ---- Momentum factor block (F1-F4), all same-market unless noted ----
+    momentum_max_deals: int = 10        # F1/F2: up to this many most recent IPOs...
+    momentum_window_days: int = 90      # ...within this many calendar days
+    momentum_extended: bool = True      # add deal count + IQR to the F1 spec
+    momentum_horizons: tuple[int, ...] = (1, 5)   # F1/F2 measured at 1d and 1w
+    supply_window_days: int = 90        # F3/F4 rolling window (~3 months)
+    supply_trailing_days: int = 365     # F3_accel: trailing pace reference
+    sector_30d_days: int = 30           # F4_sec_cnt_30d window (all markets)
+    # GPR window (daily Caldara-Iacoviello GPR index; see scripts/prepare_gpr.py)
+    gpr_window: int = 21                # trading days of GPR history for the encoder
     # Bookrunner columns are every column in ipos.csv prefixed with this.
     bookrunner_prefix: str = "bk_"
-    # Binary/static feature columns (besides bookrunners).
+    # Binary/static feature columns (besides bookrunners and market one-hot).
     sector_cols: tuple[str, ...] = ("is_tmt", "is_healthcare")
     # Bookrunner columns rarer than this many deals in the *training* fold are
     # merged into a shared "other" bucket by the fold scaler.
@@ -48,17 +53,17 @@ class SplitConfig:
 @dataclass
 class ModelConfig:
     # Arms on/off — this is what the ablation ladder toggles.
-    use_panel: bool = True
+    use_momentum: bool = True
+    momentum_groups: tuple[str, ...] = ("f1", "f2", "f3", "f4")
     use_gpr: bool = True
     gpr_mode: str = "lstm"          # "level" | "engineered" | "lstm"
-    panel_pooling: str = "mean"     # "mean" | "attn" (cross-attention, query = static)
-    gating: str = "none"            # "none" | "film" (GPR FiLM-modulates static & panel)
+    gating: str = "none"            # "none" | "film" (GPR modulates static & momentum)
     # Sizes (kept deliberately small for N ~ 4k).
     bookrunner_emb_dim: int = 6
     static_hidden: int = 32
     static_out: int = 16
-    panel_hidden: int = 12
-    panel_out: int = 16
+    momentum_hidden: int = 32
+    momentum_out: int = 16
     gpr_hidden: int = 12
     gpr_out: int = 8
     fusion_hidden: tuple[int, ...] = (32, 16)
@@ -132,7 +137,7 @@ class Config:
 
     def override(self, **kwargs: Any) -> "Config":
         """Return a deep copy with dotted-key overrides, e.g.
-        cfg.override(**{"model.use_panel": False, "model.gpr_mode": "level"}).
+        cfg.override(**{"model.use_momentum": False, "model.gpr_mode": "level"}).
         """
         cfg = _deepcopy_dc(self)
         for key, value in kwargs.items():

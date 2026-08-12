@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Train and evaluate the full three-arm model (V1 by default).
 
-Use --attn/--film for the V2 extensions, --seeds to control the ensemble.
+Use --film for the V2 gating extension, --seeds to control the ensemble.
 """
 import argparse
 
@@ -15,7 +15,6 @@ def main() -> None:
     p.add_argument("--data", default="data")
     p.add_argument("--config", default=None, help="optional YAML config")
     p.add_argument("--seeds", type=int, nargs="+", default=None)
-    p.add_argument("--attn", action="store_true", help="cross-attention panel pooling")
     p.add_argument("--film", action="store_true", help="FiLM gating by the GPR arm")
     args = p.parse_args()
 
@@ -23,8 +22,6 @@ def main() -> None:
     overrides = {}
     if args.seeds:
         overrides["train.seeds"] = tuple(args.seeds)
-    if args.attn:
-        overrides["model.panel_pooling"] = "attn"
     if args.film:
         overrides["model.gating"] = "film"
     if overrides:

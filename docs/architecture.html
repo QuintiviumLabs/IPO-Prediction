@@ -1,0 +1,441 @@
+<title>Three-Arm IPO Model</title>
+<style>
+  :root {
+    --bg: #F5F7F4;
+    --surface: #FFFFFF;
+    --ink: #1F2B31;
+    --muted: #5D6D72;
+    --line: #C8D1CE;
+    --static: #96660D;      /* deal traits — bronze */
+    --panel: #10756A;       /* market-state momentum factors — teal */
+    --risk: #A83A28;        /* geopolitical risk — rust */
+    --static-soft: #F2E7D2;
+    --panel-soft: #DBEDE8;
+    --risk-soft: #F4DCD5;
+    --band: #CFE7E1;
+    --display: "Avenir Next", Avenir, Futura, "Century Gothic", "Segoe UI", system-ui, sans-serif;
+    --body: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+    --mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131A1D;
+      --surface: #1B2327;
+      --ink: #E5EAE7;
+      --muted: #92A19D;
+      --line: #3A474B;
+      --static: #D5A554;
+      --panel: #46B4A3;
+      --risk: #DF7258;
+      --static-soft: #2E2718;
+      --panel-soft: #17302C;
+      --risk-soft: #34211C;
+      --band: #1F423C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131A1D;
+    --surface: #1B2327;
+    --ink: #E5EAE7;
+    --muted: #92A19D;
+    --line: #3A474B;
+    --static: #D5A554;
+    --panel: #46B4A3;
+    --risk: #DF7258;
+    --static-soft: #2E2718;
+    --panel-soft: #17302C;
+    --risk-soft: #34211C;
+    --band: #1F423C;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    margin: 0;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 48px 24px 72px; }
+  header { margin-bottom: 36px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(28px, 4.5vw, 42px);
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 66ch;
+    margin: 0;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    margin: 22px 0 0;
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  figure { margin: 0 0 44px; }
+  .figcard {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 14px 8px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 640px; margin: 0 auto; }
+  figcaption {
+    font-size: 14.5px;
+    color: var(--muted);
+    max-width: 78ch;
+    margin: 12px auto 0;
+    padding: 0 6px;
+  }
+  figcaption strong { color: var(--ink); font-weight: 600; }
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 22px;
+    margin: 52px 0 6px;
+  }
+  .h2sub { color: var(--muted); font-size: 15px; margin: 0 0 22px; max-width: 70ch; }
+  ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 16px;
+    padding: 16px 4px;
+    border-top: 1px solid var(--line);
+  }
+  ol.steps li:last-child { border-bottom: 1px solid var(--line); }
+  ol.steps li::before {
+    content: counter(step, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+  ol.steps b {
+    font-family: var(--display);
+    font-weight: 600;
+    display: block;
+    font-size: 16px;
+    margin-bottom: 3px;
+  }
+  ol.steps p { margin: 0; font-size: 15px; color: var(--muted); max-width: 78ch; }
+  ol.steps p code, footer code {
+    font-family: var(--mono); font-size: 0.86em;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px; color: var(--ink);
+  }
+  footer {
+    margin-top: 48px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 2;
+  }
+  svg text { font-family: var(--display); fill: var(--ink); }
+  svg .t-title { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; }
+  svg .t-sub   { font-size: 11.5px; fill: var(--muted); }
+  svg .t-mono  { font-family: var(--mono); font-size: 11.5px; }
+  svg .t-mono-b{ font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  svg .t-chip  { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+  svg .t-big   { font-size: 14px; font-weight: 600; }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Model architecture</p>
+    <h1>Three-Arm IPO Model</h1>
+    <p class="standfirst">
+      How one target IPO's observable world — its deal traits, the state of its own IPO
+      market (factors F1–F4), and the geopolitical backdrop — becomes a forecast
+      distribution at four horizons, with the 1-month return as the target.
+    </p>
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--static)"></i> deal traits (static)</span>
+      <span><i class="swatch" style="background:var(--panel)"></i> market state · F1–F4 (same market)</span>
+      <span><i class="swatch" style="background:var(--risk)"></i> geopolitical risk (daily GPR index)</span>
+    </div>
+  </header>
+
+  <figure>
+    <div class="figcard">
+    <svg viewBox="0 0 960 900" role="img"
+         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 40-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons, with the 1-month median as the point forecast.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+        </marker>
+        <marker id="arr-risk" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--risk)"/>
+        </marker>
+      </defs>
+
+      <!-- ===== Information boundary banner ===== -->
+      <rect x="20" y="8" width="920" height="44" rx="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="40" y="35" class="t-big">Target IPO — priced at t₀</text>
+      <text x="920" y="35" text-anchor="end" class="t-sub">only data dated strictly before t₀ crosses this line</text>
+      <line x1="20" y1="52" x2="940" y2="52" stroke="var(--ink)" stroke-width="1.4"/>
+
+      <line x1="160" y1="52" x2="160" y2="74" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="480" y1="52" x2="480" y2="74" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="800" y1="52" x2="800" y2="74" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+
+      <!-- ===== Input cards ===== -->
+      <!-- A: deal traits -->
+      <rect x="20" y="78" width="280" height="134" rx="8" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.3"/>
+      <text x="36" y="102" class="t-title" fill="var(--static)">DEAL TRAITS</text>
+      <text x="36" y="128" class="t-mono">TMT · healthcare flags</text>
+      <text x="36" y="150" class="t-mono">market (one-hot)</text>
+      <text x="36" y="172" class="t-mono">bookrunner multi-hot</text>
+      <text x="36" y="196" class="t-mono">bookrunner count</text>
+
+      <!-- B: market state factors -->
+      <rect x="340" y="78" width="280" height="134" rx="8" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.3"/>
+      <text x="356" y="100" class="t-title" fill="var(--panel)">IPO MARKET STATE</text>
+      <text x="356" y="122" class="t-mono">F1  median · VW return (1d, 1w)</text>
+      <text x="356" y="141" class="t-mono">F2  break rate · downside depth</text>
+      <text x="356" y="160" class="t-mono">F3  supply: count · proceeds · accel</text>
+      <text x="356" y="179" class="t-mono">F4  sector density (3m · 30d)</text>
+      <text x="356" y="201" class="t-sub">≤10 same-market deals, 90 days · observable returns only</text>
+
+      <!-- C: geopolitical risk -->
+      <rect x="660" y="78" width="280" height="134" rx="8" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.3"/>
+      <text x="676" y="102" class="t-title" fill="var(--risk)">GEOPOLITICAL RISK</text>
+      <polyline points="676,162 700,156 724,160 748,148 772,154 796,136 820,144 844,130 868,138 892,126" fill="none" stroke="var(--risk)" stroke-width="1.8"/>
+      <circle cx="892" cy="126" r="3.4" fill="var(--risk)"/>
+      <text x="676" y="198" class="t-sub">daily Caldara–Iacoviello GPR index, last 21 trading days</text>
+
+      <!-- arrows into encoders -->
+      <line x1="160" y1="212" x2="160" y2="236" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="480" y1="212" x2="480" y2="236" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="800" y1="212" x2="800" y2="236" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+
+      <!-- ===== Encoders ===== -->
+      <rect x="20" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--static)" stroke-width="1.3"/>
+      <text x="160" y="266" text-anchor="middle" class="t-mono-b">banks → 6-d embedding, MLP → 16</text>
+      <text x="160" y="288" text-anchor="middle" class="t-sub">mean of embeddings over the deal's banks</text>
+
+      <rect x="340" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--panel)" stroke-width="1.3"/>
+      <text x="480" y="266" text-anchor="middle" class="t-mono-b">MLP 32 → 16</text>
+      <text x="480" y="288" text-anchor="middle" class="t-sub">F3/F4 arrive as expanding-window z-scores</text>
+
+      <rect x="660" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.3"/>
+      <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 12)</text>
+      <text x="800" y="288" text-anchor="middle" class="t-sub">ablations swap in: level only · 5 summaries</text>
+
+      <!-- arrows to z chips -->
+      <line x1="160" y1="306" x2="160" y2="330" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="480" y1="306" x2="480" y2="330" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="800" y1="306" x2="800" y2="330" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+
+      <!-- ===== Representation chips ===== -->
+      <rect x="70" y="334" width="180" height="38" rx="19" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.4"/>
+      <text x="160" y="358" text-anchor="middle" class="t-chip" fill="var(--static)">z_static · 16-d</text>
+
+      <rect x="390" y="334" width="180" height="38" rx="19" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.4"/>
+      <text x="480" y="358" text-anchor="middle" class="t-chip" fill="var(--panel)">z_mom · 16-d</text>
+
+      <rect x="716" y="334" width="168" height="38" rx="19" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.4"/>
+      <text x="800" y="358" text-anchor="middle" class="t-chip" fill="var(--risk)">z_gpr · 8-d</text>
+
+      <!-- ===== FiLM gates (V2) ===== -->
+      <line x1="160" y1="372" x2="160" y2="400" stroke="var(--muted)" stroke-width="1.3"/>
+      <line x1="480" y1="372" x2="480" y2="400" stroke="var(--muted)" stroke-width="1.3"/>
+      <circle cx="160" cy="418" r="17" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.5"/>
+      <text x="160" y="423" text-anchor="middle" class="t-mono-b" fill="var(--risk)">⊙+</text>
+      <circle cx="480" cy="418" r="17" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.5"/>
+      <text x="480" y="423" text-anchor="middle" class="t-mono-b" fill="var(--risk)">⊙+</text>
+
+      <path d="M 784 372 L 784 418 L 501 418" fill="none" stroke="var(--risk)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arr-risk)"/>
+      <path d="M 459 418 L 181 418" fill="none" stroke="var(--risk)" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arr-risk)"/>
+      <text x="640" y="404" text-anchor="middle" class="t-sub" fill="var(--risk)">FiLM (V2): γ, β from z_gpr — z ← γ⊙z + β · starts as identity</text>
+
+      <!-- converging arrows into concat -->
+      <polyline points="160,435 160,448 296,466" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <polyline points="480,435 480,448 536,466" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <polyline points="816,372 816,440 724,466" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+
+      <!-- ===== Concat bar (widths ∝ 16:16:8) ===== -->
+      <rect x="180" y="470" width="240" height="36" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.3"/>
+      <rect x="420" y="470" width="240" height="36" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.3"/>
+      <rect x="660" y="470" width="120" height="36" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.3"/>
+      <text x="300" y="493" text-anchor="middle" class="t-mono" fill="var(--static)">16</text>
+      <text x="540" y="493" text-anchor="middle" class="t-mono" fill="var(--panel)">16</text>
+      <text x="720" y="493" text-anchor="middle" class="t-mono" fill="var(--risk)">8</text>
+      <text x="796" y="493" class="t-mono-b">= 40-d</text>
+      <text x="164" y="493" text-anchor="end" class="t-sub">concat</text>
+
+      <!-- fusion -->
+      <line x1="480" y1="506" x2="480" y2="530" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <rect x="330" y="534" width="300" height="62" rx="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
+      <text x="480" y="560" text-anchor="middle" class="t-big">FUSION MLP</text>
+      <text x="480" y="582" text-anchor="middle" class="t-sub">40 → 32 → 16 · ReLU · dropout</text>
+
+      <line x1="480" y1="596" x2="480" y2="618" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <rect x="352" y="622" width="256" height="36" rx="18" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.4"/>
+      <text x="480" y="645" text-anchor="middle" class="t-chip">shared 16-d representation</text>
+
+      <!-- fan out to four heads -->
+      <polyline points="480,658 480,676 140,686 140,700" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <polyline points="480,658 480,676 367,686 367,700" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <polyline points="480,658 480,676 593,686 593,700" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+      <polyline points="480,658 480,676 820,686 820,700" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
+
+      <!-- ===== Quantile heads: 1d / 3d / 1w / 1m ===== -->
+      <rect x="40" y="704" width="200" height="96" rx="8" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="140" y="728" text-anchor="middle" class="t-title" fill="var(--muted)">1 DAY</text>
+      <line x1="72" y1="760" x2="208" y2="760" stroke="var(--line)" stroke-width="1.3"/>
+      <line x1="88" y1="751" x2="88" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="140" cy="760" r="4.6" fill="var(--muted)"/>
+      <line x1="192" y1="751" x2="192" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="140" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="140" y="818" text-anchor="middle" class="t-sub">aux — the pop</text>
+
+      <rect x="267" y="704" width="200" height="96" rx="8" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="367" y="728" text-anchor="middle" class="t-title" fill="var(--muted)">3 DAYS</text>
+      <line x1="299" y1="760" x2="435" y2="760" stroke="var(--line)" stroke-width="1.3"/>
+      <line x1="315" y1="751" x2="315" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="367" cy="760" r="4.6" fill="var(--muted)"/>
+      <line x1="419" y1="751" x2="419" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="367" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="367" y="818" text-anchor="middle" class="t-sub">aux</text>
+
+      <rect x="493" y="704" width="200" height="96" rx="8" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="593" y="728" text-anchor="middle" class="t-title" fill="var(--muted)">1 WEEK</text>
+      <line x1="525" y1="760" x2="661" y2="760" stroke="var(--line)" stroke-width="1.3"/>
+      <line x1="541" y1="751" x2="541" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <circle cx="593" cy="760" r="4.6" fill="var(--muted)"/>
+      <line x1="645" y1="751" x2="645" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
+      <text x="593" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="593" y="818" text-anchor="middle" class="t-sub">aux</text>
+
+      <rect x="720" y="704" width="200" height="96" rx="8" fill="var(--panel-soft)" stroke="var(--ink)" stroke-width="2"/>
+      <text x="820" y="728" text-anchor="middle" class="t-title">1 MONTH · MAIN</text>
+      <line x1="752" y1="760" x2="888" y2="760" stroke="var(--muted)" stroke-width="1.3"/>
+      <line x1="768" y1="751" x2="768" y2="769" stroke="var(--ink)" stroke-width="1.6"/>
+      <circle cx="820" cy="760" r="6" fill="var(--ink)"/>
+      <line x1="872" y1="751" x2="872" y2="769" stroke="var(--ink)" stroke-width="1.6"/>
+      <text x="820" y="789" text-anchor="middle" class="t-mono">q₁₀ · q₅₀ · q₉₀</text>
+
+      <line x1="820" y1="800" x2="820" y2="824" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#arr)"/>
+      <rect x="682" y="828" width="276" height="40" rx="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"/>
+      <text x="820" y="853" text-anchor="middle" class="t-chip">ŷ = q₅₀ · band = [q₁₀, q₉₀]</text>
+      <text x="360" y="856" text-anchor="middle" class="t-sub">horizons in trading days · quantiles cannot cross by construction · forecasts averaged over 5 seeds</text>
+    </svg>
+    </div>
+    <figcaption>
+      <strong>The forward pass.</strong> The momentum arm now encodes an engineered factor block —
+      F1 recent-deal performance (median + value-weighted, ≤10 same-market deals in 90 days),
+      F2 break-issue rate and downside depth, F3 rolling supply, F4 sector issuance density —
+      with every return admitted only if it was observable before t₀, and F3/F4 z-scored against
+      each market's own expanding history. Dashed paths exist only in the V2 configuration:
+      FiLM lets the risk regime decide how loudly deal quality and market momentum speak.
+    </figcaption>
+  </figure>
+
+  <h2>Reading one prediction</h2>
+  <p class="h2sub">The model emits a distribution per deal, not a single number. An example output for one IPO:</p>
+
+  <figure>
+    <div class="figcard">
+    <svg viewBox="0 0 960 190" role="img"
+         aria-label="Example forecast on a return axis: the 10th percentile at minus 11.4 percent, the median point forecast at plus 2.8 percent, and the 90th percentile at plus 17.9 percent form an 80 percent interval around the point forecast.">
+      <defs>
+        <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      <line x1="80" y1="126" x2="900" y2="126" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr2)"/>
+      <g class="t-mono" fill="var(--muted)">
+        <text x="80"  y="148" text-anchor="middle" fill="var(--muted)">−20%</text>
+        <text x="240" y="148" text-anchor="middle" fill="var(--muted)">−10%</text>
+        <text x="400" y="148" text-anchor="middle" fill="var(--muted)">0</text>
+        <text x="560" y="148" text-anchor="middle" fill="var(--muted)">+10%</text>
+        <text x="720" y="148" text-anchor="middle" fill="var(--muted)">+20%</text>
+        <text x="880" y="148" text-anchor="middle" fill="var(--muted)">+30%</text>
+      </g>
+      <text x="900" y="170" text-anchor="end" class="t-sub">1-month (21 trading day) market-excess return from offer price</text>
+      <line x1="400" y1="60" x2="400" y2="132" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 4"/>
+
+      <rect x="218" y="88" width="468" height="30" rx="6" fill="var(--band)" stroke="var(--panel)" stroke-width="1.4"/>
+      <line x1="218" y1="80" x2="218" y2="126" stroke="var(--panel)" stroke-width="1.8"/>
+      <line x1="686" y1="80" x2="686" y2="126" stroke="var(--panel)" stroke-width="1.8"/>
+      <circle cx="445" cy="103" r="7" fill="var(--ink)"/>
+
+      <text x="218" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₁₀ = −11.4%</text>
+      <text x="686" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₉₀ = +17.9%</text>
+      <text x="445" y="42" text-anchor="middle" class="t-mono-b">q₅₀ = +2.8% — the point forecast</text>
+      <line x1="445" y1="50" x2="445" y2="92" stroke="var(--ink)" stroke-width="1.2"/>
+      <text x="452" y="180" text-anchor="middle" class="t-sub">band = the model's own 80% uncertainty for this deal</text>
+    </svg>
+    </div>
+    <figcaption>
+      A wide band on a deal is information, not failure — trained with pinball loss, the width
+      itself responds to the inputs, so you can ask whether rising geopolitical risk widens
+      predicted uncertainty even when it doesn't move the median.
+    </figcaption>
+  </figure>
+
+  <h2>How a prediction is made</h2>
+  <p class="h2sub">The five stages every forecast passes through, in order:</p>
+
+  <ol class="steps">
+    <li><div>
+      <b>Gather only what was knowable</b>
+      <p>At pricing date t₀: the deal's static traits, and the F1–F4 factor block computed over
+      same-market history — a recent deal's h-day return enters F1/F2 only if its h-th close
+      predates t₀ — plus 21 days of the daily GPR index. Nothing dated t₀ or later is admitted;
+      <code>features.py</code> enforces the cutoff and a prefix-stability test proves even the
+      expanding z-scores are unchanged when future IPOs are deleted from the dataset.</p>
+    </div></li>
+    <li><div>
+      <b>Encode each source in its own arm</b>
+      <p>Banks become a mean of learned 6-d embeddings inside the static arm; the factor block
+      passes through a small MLP; a GRU reads the GPR window (with "level only" and "5 summaries"
+      as ablation alternatives).</p>
+    </div></li>
+    <li><div>
+      <b>Condition on the regime (V2)</b>
+      <p>FiLM gates rescale <code>z_static</code> and <code>z_mom</code> using γ, β computed from
+      <code>z_gpr</code>. Both start as the identity, so V2 can only depart from V1 where the
+      data rewards it.</p>
+    </div></li>
+    <li><div>
+      <b>Fuse</b>
+      <p>The three representations are concatenated (16 + 16 + 8 = 40-d) and compressed by a small
+      MLP into one 16-d representation of the deal-in-its-moment.</p>
+    </div></li>
+    <li><div>
+      <b>Emit a distribution, not a number</b>
+      <p>Four horizons (1d / 3d / 1w / 1m, trading days) × three quantiles, non-crossing by
+      construction (the 10th and 90th are the median minus/plus a softplus offset). The short
+      horizons exist only to regularize training; the 1-month median — averaged across five
+      independently trained seeds — is the forecast, and its q₁₀–q₉₀ band is the uncertainty
+      estimate.</p>
+    </div></li>
+  </ol>
+
+  <footer>
+    model <code>ipo_model/models/model.py</code> ·
+    factors <code>ipo_model/data/features.py</code> ·
+    training <code>ipo_model/training/loop.py</code> ·
+    GPR prep <code>scripts/prepare_gpr.py</code><br>
+    branch <code>claude/ipo-prediction-multi-arm-vcr79w</code> · sizes shown are the defaults in <code>ipo_model/config.py</code>
+  </footer>
+</div>

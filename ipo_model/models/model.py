@@ -1,26 +1,24 @@
 """Three-arm IPO return model.
 
   STATIC ARM     bookrunner multi-hot -> bag-of-embeddings (mean), sector
-                 binaries, bookrunner count -> small MLP -> z_static
-  PANEL ARM      shared GRU over each recent IPO's event-time excess-return
-                 sequence (masked, variable length) + per-IPO scalars
-                 (age, pop, sector) -> masked mean pooling, or cross-attention
-                 with the target's static embedding as the query -> z_panel
+                 binaries, market one-hot, bookrunner count -> small MLP
+                 -> z_static
+  MOMENTUM ARM   the engineered market-state block (F1 recent-deal
+                 performance, F2 break rate/depth, F3 rolling supply,
+                 F4 sector issuance density) -> small MLP -> z_mom
   GPR ARM        "level" (last value), "engineered" (5 summaries -> MLP),
-                 or "lstm" (GRU over the window) -> z_gpr
-  GATING         optional FiLM: z_gpr modulates BOTH z_static and z_panel
+                 or "lstm" (GRU over the daily window) -> z_gpr
+  GATING         optional FiLM: z_gpr modulates BOTH z_static and z_mom
                  (scale + shift, zero-initialized so training starts at
-                 identity) — "the geopolitical regime decides how much recent
-                 momentum and deal quality matter".
+                 identity) — "the geopolitical regime decides how much deal
+                 quality and market momentum matter".
   FUSION         concat -> MLP -> shared representation -> per-horizon
-                 quantile heads. Each head predicts the median directly and
-                 the 10th/90th percentiles as median -/+ softplus offsets, so
-                 quantiles can never cross. The median of the main horizon is
-                 the point forecast.
+                 quantile heads (1d / 3d / 1w / 1m). Each head predicts the
+                 median directly and the 10th/90th percentiles as median -/+
+                 softplus offsets, so quantiles can never cross. The median
+                 of the main horizon is the point forecast.
 """
 from __future__ import annotations
-
-import math
 
 import torch
 import torch.nn as nn
@@ -56,46 +54,16 @@ class StaticArm(nn.Module):
         return self.net(torch.cat(parts, dim=1))
 
 
-class PanelArm(nn.Module):
-    """Shared GRU over K recent-IPO sequences + pooling across IPOs."""
+class MomentumArm(nn.Module):
+    """Encodes the engineered F1-F4 market-state block."""
 
-    def __init__(self, n_scalars: int, cfg: ModelConfig, query_dim: int):
+    def __init__(self, n_features: int, cfg: ModelConfig):
         super().__init__()
-        self.pooling = cfg.panel_pooling
-        self.gru = nn.GRU(1, cfg.panel_hidden, batch_first=True)
-        self.proj = nn.Sequential(
-            nn.Linear(cfg.panel_hidden + n_scalars, cfg.panel_out), nn.ReLU(),
-        )
-        if self.pooling == "attn":
-            d = cfg.panel_out
-            self.wq = nn.Linear(query_dim, d, bias=False)
-            self.wk = nn.Linear(cfg.panel_out, d, bias=False)
-            self.scale = math.sqrt(d)
-        elif self.pooling != "mean":
-            raise ValueError(f"Unknown panel_pooling: {self.pooling}")
+        self.net = mlp([n_features, cfg.momentum_hidden, cfg.momentum_out],
+                       cfg.dropout, out_act=True)
 
-    def forward(self, seq: torch.Tensor, lengths: torch.Tensor, scalars: torch.Tensor,
-                valid: torch.Tensor, query: torch.Tensor | None) -> torch.Tensor:
-        B, K, T = seq.shape
-        flat = seq.reshape(B * K, T, 1)
-        flat_len = lengths.reshape(B * K)
-        out, _ = self.gru(flat)                                   # (B*K, T, H)
-        idx = (flat_len - 1).clamp(min=0)
-        h = out[torch.arange(B * K, device=seq.device), idx]      # last valid state
-        h = h * (flat_len > 0).float().unsqueeze(1)               # zero empty slots
-        h = h.reshape(B, K, -1)
-        h = self.proj(torch.cat([h, scalars], dim=2))             # (B, K, D)
-
-        mask = valid & (lengths > 0)                              # (B, K)
-        if self.pooling == "mean":
-            w = mask.float()
-            return (h * w.unsqueeze(2)).sum(1) / w.sum(1, keepdim=True).clamp(min=1.0)
-        # Cross-attention: which recent IPOs are most relevant to THIS deal?
-        q = self.wq(query)                                        # (B, D)
-        scores = torch.einsum("bkd,bd->bk", self.wk(h), q) / self.scale
-        scores = scores.masked_fill(~mask, -1e9)
-        w = torch.softmax(scores, dim=1) * mask.any(1, keepdim=True).float()
-        return torch.einsum("bk,bkd->bd", w, h)
+    def forward(self, momentum: torch.Tensor) -> torch.Tensor:
+        return self.net(momentum)
 
 
 class GPRArm(nn.Module):
@@ -158,15 +126,15 @@ class QuantileHead(nn.Module):
 
 class ThreeArmModel(nn.Module):
     def __init__(self, cfg: ModelConfig, n_binary: int, n_bookrunners: int,
-                 n_panel_scalars: int, n_gpr_feats: int, horizons: tuple[int, ...]):
+                 n_momentum: int, n_gpr_feats: int, horizons: tuple[int, ...]):
         super().__init__()
         self.cfg = cfg
         self.horizons = horizons
         self.static_arm = StaticArm(n_binary, n_bookrunners, cfg)
         fusion_in = cfg.static_out
-        if cfg.use_panel:
-            self.panel_arm = PanelArm(n_panel_scalars, cfg, query_dim=cfg.static_out)
-            fusion_in += cfg.panel_out
+        if cfg.use_momentum:
+            self.momentum_arm = MomentumArm(n_momentum, cfg)
+            fusion_in += cfg.momentum_out
         if cfg.use_gpr:
             self.gpr_arm = GPRArm(cfg, n_gpr_feats)
             fusion_in += cfg.gpr_out
@@ -174,8 +142,8 @@ class ThreeArmModel(nn.Module):
             if not cfg.use_gpr:
                 raise ValueError("FiLM gating requires the GPR arm.")
             self.film_static = FiLM(cfg.gpr_out, cfg.static_out)
-            if cfg.use_panel:
-                self.film_panel = FiLM(cfg.gpr_out, cfg.panel_out)
+            if cfg.use_momentum:
+                self.film_momentum = FiLM(cfg.gpr_out, cfg.momentum_out)
         elif cfg.gating != "none":
             raise ValueError(f"Unknown gating: {cfg.gating}")
 
@@ -193,13 +161,11 @@ class ThreeArmModel(nn.Module):
             z_gpr = self.gpr_arm(batch["gpr_seq"], batch["gpr_feats"])
         if self.cfg.gating == "film":
             parts[0] = self.film_static(z_static, z_gpr)
-        if self.cfg.use_panel:
-            z_panel = self.panel_arm(batch["panel_seq"], batch["panel_len"],
-                                     batch["panel_scalars"], batch["panel_valid"],
-                                     query=z_static)
+        if self.cfg.use_momentum:
+            z_mom = self.momentum_arm(batch["momentum"])
             if self.cfg.gating == "film":
-                z_panel = self.film_panel(z_panel, z_gpr)
-            parts.append(z_panel)
+                z_mom = self.film_momentum(z_mom, z_gpr)
+            parts.append(z_mom)
         if z_gpr is not None:
             parts.append(z_gpr)
         rep = self.fusion(torch.cat(parts, dim=1))

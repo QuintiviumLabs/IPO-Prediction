@@ -39,14 +39,13 @@ class RunResult:
 def _tensors(fs: FeatureSet, scaler: FoldScaler, cfg: Config,
              device: str) -> dict[str, torch.Tensor]:
     binary, bk = scaler.static_matrix(fs)
-    seq, scal = scaler.panel(fs)
+    mom = scaler.momentum_matrix(fs)
+    groups = cfg.model.momentum_groups
+    keep = [i for i, n in enumerate(fs.momentum_names) if n.split("_")[0] in groups]
     t = {
         "static_binary": torch.tensor(binary),
         "static_bk": torch.tensor(bk),
-        "panel_seq": torch.tensor(seq),
-        "panel_len": torch.tensor(fs.panel_len),
-        "panel_scalars": torch.tensor(scal),
-        "panel_valid": torch.tensor(fs.panel_valid),
+        "momentum": torch.tensor(mom[:, keep]),
         "gpr_seq": torch.tensor(scaler.gpr_sequences(fs)),
         "gpr_feats": torch.tensor(scaler.gpr_features(fs)),
     }
@@ -63,7 +62,7 @@ def _build_model(cfg: Config, tensors: dict[str, torch.Tensor]) -> ThreeArmModel
         cfg.model,
         n_binary=tensors["static_binary"].shape[1],
         n_bookrunners=tensors["static_bk"].shape[1],
-        n_panel_scalars=tensors["panel_scalars"].shape[2],
+        n_momentum=tensors["momentum"].shape[1],
         n_gpr_feats=tensors["gpr_feats"].shape[1],
         horizons=tuple(sorted(cfg.data.horizons)),
     )

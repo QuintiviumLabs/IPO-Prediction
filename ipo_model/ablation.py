@@ -4,13 +4,10 @@ Each rung is a named set of config overrides on the same data, folds, seeds
 and metrics, so differences between rungs are attributable to the component
 being toggled:
 
-  0  lgbm / xgb      trees on engineered features (the bar to clear;
+  0  lgbm / xgb      trees on the engineered features (the bar to clear;
                      two engines as a robustness check on the baseline)
-  0r lgbm_raw /      trees on the FULL flattened inputs (every panel return,
-     xgb_raw         raw GPR window, plus the engineered summaries): if these
-                     match the deep model, sequences matter but the encoder
-                     doesn't; if they fail where the deep model wins, the
-                     sequential inductive bias is doing the work
+  0r lgbm_raw /      trees on engineered features + the raw GPR window:
+     xgb_raw         does unsummarized GPR history help trees?
   1  static          static arm only
   2  static+gpr_lvl  + current GPR level
   3  static+gpr_seq  + GPR temporal encoder (GRU)
@@ -31,18 +28,16 @@ from ipo_model.data.features import FeatureSet
 from ipo_model.training import loop
 
 RUNGS: dict[str, dict[str, Any]] = {
-    "1_static": {"model.use_panel": False, "model.use_gpr": False},
-    "2_static+gpr_level": {"model.use_panel": False, "model.use_gpr": True,
-                           "model.gpr_mode": "level"},
-    "3_static+gpr_seq": {"model.use_panel": False, "model.use_gpr": True,
-                         "model.gpr_mode": "lstm"},
-    "4_static+panel": {"model.use_panel": True, "model.use_gpr": False},
-    "5_full_v1": {"model.use_panel": True, "model.use_gpr": True,
-                  "model.gpr_mode": "lstm", "model.panel_pooling": "mean",
-                  "model.gating": "none"},
-    "6_full_v2_attn_film": {"model.use_panel": True, "model.use_gpr": True,
-                            "model.gpr_mode": "lstm", "model.panel_pooling": "attn",
-                            "model.gating": "film"},
+    "1_static": {"model.use_momentum": False, "model.use_gpr": False},
+    "2_static+f1": {"model.use_momentum": True, "model.momentum_groups": ("f1",),
+                    "model.use_gpr": False},
+    "3_static+momentum": {"model.use_momentum": True, "model.use_gpr": False},
+    "4_momentum+gpr_level": {"model.use_momentum": True, "model.use_gpr": True,
+                             "model.gpr_mode": "level"},
+    "5_full_v1": {"model.use_momentum": True, "model.use_gpr": True,
+                  "model.gpr_mode": "lstm", "model.gating": "none"},
+    "6_full_v2_film": {"model.use_momentum": True, "model.use_gpr": True,
+                       "model.gpr_mode": "lstm", "model.gating": "film"},
 }
 
 REPORT_METRICS = ["rank_ic", "hit_rate", "decile_spread", "mae", "pinball", "coverage"]

@@ -2,10 +2,15 @@
 # Anything omitted keeps the dataclass default. Pass with --config.
 
 data:
-  horizons: [1, 5, 21]      # trading days; last = main target
+  horizons: [1, 3, 5, 21]   # trading days: 1d, 3d, 1w, 1m; last = main target
   market_adjust: true
-  panel_size: 20
-  panel_seq_len: 21
+  momentum_max_deals: 10
+  momentum_window_days: 90
+  momentum_extended: true   # add deal count + IQR to the F1 spec
+  momentum_horizons: [1, 5]
+  supply_window_days: 90
+  supply_trailing_days: 365
+  sector_30d_days: 30
   gpr_window: 21
   min_bookrunner_deals: 20
 
@@ -16,10 +21,10 @@ split:
   embargo_days: 5
 
 model:
-  use_panel: true
+  use_momentum: true
+  momentum_groups: [f1, f2, f3, f4]
   use_gpr: true
   gpr_mode: lstm            # level | engineered | lstm
-  panel_pooling: mean       # mean | attn
   gating: none              # none | film
   dropout: 0.2
 

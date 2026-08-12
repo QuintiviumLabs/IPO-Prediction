@@ -2,6 +2,7 @@
 features, and purging must keep training label windows out of test periods."""
 import numpy as np
 
+from ipo_model.data.features import build_features
 from ipo_model.data.splits import purged_walk_forward
 
 
@@ -12,39 +13,65 @@ def test_rows_sorted_and_labeled(fs):
     assert (fs.label_end > fs.dates).all()
 
 
-def test_panel_uses_only_prior_ipos(fs, raw):
-    """Every IPO in a target's panel must have listed strictly earlier, and its
-    sequence must only cover dates strictly before the target's first trade."""
-    first_trade = dict(zip(raw.ipos["ipo_id"], raw.ipos["first_trade_date"].to_numpy()))
+def test_f1_momentum_recomputed_by_hand(fs, raw, cfg):
+    """Recompute F1_med_1d / F1_vw_1d for sampled targets straight from the
+    CSVs, applying the observability rule (h-th close strictly before t0)."""
+    ipos = raw.ipos.sort_values("first_trade_date").reset_index(drop=True)
     prices = raw.prices.sort_values(["ipo_id", "date"])
     dates_by_id = {k: v["date"].to_numpy() for k, v in prices.groupby("ipo_id")}
-    id_by_date_order = sorted(first_trade, key=lambda k: first_trade[k])
+    close_by_id = {k: v["close"].to_numpy() for k, v in prices.groupby("ipo_id")}
+    offer = dict(zip(ipos["ipo_id"], ipos["offer_price"]))
+    med_col = fs.momentum_names.index("f1_med_1d")
+    vw_col = fs.momentum_names.index("f1_vw_1d")
+    win = np.timedelta64(cfg.data.momentum_window_days, "D")
 
-    for i in range(0, len(fs), 37):  # sample of targets
-        t_i = fs.dates[i]
-        prior = [k for k in id_by_date_order if first_trade[k] < t_i]
-        expected = prior[-fs.panel_seq.shape[1]:][::-1]  # most recent first
-        for slot in range(fs.panel_valid.shape[1]):
-            if not fs.panel_valid[i, slot]:
-                continue
-            jid = expected[slot]
-            L = fs.panel_len[i, slot]
-            assert L > 0
-            # The L-th close of that IPO must predate the target's first trade.
-            assert dates_by_id[jid][L - 1] < t_i
-            # And the next close (if it exists) must NOT have been usable.
-            dj = dates_by_id[jid]
-            if L < min(len(dj), fs.panel_seq.shape[2]):
-                assert dj[L] >= t_i
+    for i in range(10, len(fs), 41):
+        t0, mkt = fs.dates[i], None
+        row = ipos[ipos["ipo_id"] == fs.ids[i]].iloc[0]
+        mkt = row["market"]
+        cand = ipos[(ipos["first_trade_date"] < t0)
+                    & (ipos["first_trade_date"] >= t0 - win)
+                    & (ipos["market"] == mkt)]
+        cand = cand.sort_values("first_trade_date").iloc[::-1][: cfg.data.momentum_max_deals]
+        rets, w = [], []
+        for _, r in cand.iterrows():
+            d = dates_by_id[r["ipo_id"]]
+            if (d < t0).sum() >= 1:  # first close observable
+                rets.append(np.log(close_by_id[r["ipo_id"]][0] / offer[r["ipo_id"]]))
+                w.append(r["deal_size"])
+        if not rets:
+            continue
+        assert np.isclose(fs.momentum[i, med_col], np.median(rets), atol=1e-6)
+        vw = np.dot(rets, w) / np.sum(w)
+        assert np.isclose(fs.momentum[i, vw_col], vw, atol=1e-6)
+
+
+def test_prefix_stability_no_future_dependence(raw, cfg):
+    """Momentum factors (incl. expanding z-scores) for early rows must be
+    identical whether or not later IPOs exist in the dataset — the strongest
+    form of the no-lookahead property."""
+    full = build_features(raw, cfg.data)
+    cutoff = full.dates[int(len(full) * 0.6)]
+    trunc_ipos = raw.ipos[raw.ipos["first_trade_date"] <= cutoff]
+    trunc_prices = raw.prices[raw.prices["ipo_id"].isin(trunc_ipos["ipo_id"])]
+    from ipo_model.data.features import RawData
+    part = build_features(
+        RawData(ipos=trunc_ipos, prices=trunc_prices, gpr=raw.gpr,
+                market=raw.market, deals=raw.deals),
+        cfg.data,
+    )
+    n = len(part)
+    assert n > 50
+    assert (full.ids[:n] == part.ids[:n]).all()
+    np.testing.assert_allclose(full.momentum[:n], part.momentum[:n], atol=1e-6)
 
 
 def test_gpr_window_strictly_before_pricing(fs, raw):
     gpr = raw.gpr.set_index("date")["gpr"]
     for i in range(0, len(fs), 53):
         t_i = fs.dates[i]
-        last_val = fs.gpr_seq[i, -1]
         prior = gpr[gpr.index < t_i]
-        assert np.isclose(last_val, prior.iloc[-1])
+        assert np.isclose(fs.gpr_seq[i, -1], prior.iloc[-1])
 
 
 def test_purged_walk_forward_no_overlap(fs, cfg):
@@ -53,18 +80,14 @@ def test_purged_walk_forward_no_overlap(fs, cfg):
     embargo = np.timedelta64(cfg.split.embargo_days, "D")
     all_test = []
     for f in folds:
-        # No train/val label window (plus embargo) may touch the test period.
         assert (fs.label_end[f.train_idx] + embargo < f.test_start).all()
         assert (fs.label_end[f.val_idx] + embargo < f.test_start).all()
-        # Train labels must also clear the validation period.
         val_start = fs.dates[f.val_idx[0]]
         assert (fs.label_end[f.train_idx] + embargo < val_start).all()
-        # No index reuse within a fold.
         assert not (set(f.train_idx) & set(f.val_idx))
         assert not (set(f.train_idx) & set(f.test_idx))
         assert not (set(f.val_idx) & set(f.test_idx))
         all_test.append(f.test_idx)
-    # Test blocks tile the evaluation region without overlap.
     cat = np.concatenate(all_test)
     assert len(cat) == len(set(cat))
 
