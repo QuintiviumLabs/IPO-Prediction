@@ -1,0 +1,42 @@
+# Preset for small samples (~1.5k IPOs): smaller model, fewer folds, more
+# seeds, inner quantiles. Run with:  --config configs/small.yaml
+#
+# Rationale:
+# - quantiles (0.2, 0.5, 0.8): with ~400-900 training rows per fold, the
+#   10th/90th percentiles are estimated from a handful of tail observations;
+#   a trustworthy 60% band beats a noisy 80% one. Revert to [0.1, 0.5, 0.9]
+#   if the wider band is required, ideally with conformal calibration.
+# - halved arm/fusion sizes: parameters are the enemy at this N.
+# - 4 folds -> larger test blocks; more seeds -> ensemble variance down.
+
+split:
+  n_folds: 4
+  min_train_frac: 0.35
+  val_frac: 0.15
+
+model:
+  quantiles: [0.2, 0.5, 0.8]
+  static_hidden: 16
+  static_out: 8
+  momentum_hidden: 16
+  momentum_out: 8
+  gpr_hidden: 8
+  gpr_out: 4
+  fusion_hidden: [16, 8]
+  bookrunner_emb_dim: 4
+  dropout: 0.25
+
+train:
+  seeds: [0, 1, 2, 3, 4, 5, 6]
+
+lgbm:
+  params:
+    objective: huber
+    learning_rate: 0.05
+    num_leaves: 15
+    min_data_in_leaf: 30
+    feature_fraction: 0.7
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 2.0
+    verbosity: -1
