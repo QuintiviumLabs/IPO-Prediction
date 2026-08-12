@@ -1,13 +1,14 @@
-# Preset for small samples (~1.5k IPOs): smaller model, fewer folds, more
-# seeds, inner quantiles. Run with:  --config configs/small.yaml
+# Preset for small samples (~1.5k IPOs). The reduced model sizes are now the
+# package defaults; this preset adds the evaluation-side choices:
 #
-# Rationale:
 # - quantiles (0.2, 0.5, 0.8): with ~400-900 training rows per fold, the
 #   10th/90th percentiles are estimated from a handful of tail observations;
 #   a trustworthy 60% band beats a noisy 80% one. Revert to [0.1, 0.5, 0.9]
-#   if the wider band is required, ideally with conformal calibration.
-# - halved arm/fusion sizes: parameters are the enemy at this N.
+#   if the wider band is required, ideally with conformal calibration (CQR).
 # - 4 folds -> larger test blocks; more seeds -> ensemble variance down.
+# - smaller/shallower trees for the baselines.
+#
+# Run with:  --config configs/small.yaml
 
 split:
   n_folds: 4
@@ -16,15 +17,6 @@ split:
 
 model:
   quantiles: [0.2, 0.5, 0.8]
-  static_hidden: 16
-  static_out: 8
-  momentum_hidden: 16
-  momentum_out: 8
-  gpr_hidden: 8
-  gpr_out: 4
-  fusion_hidden: [16, 8]
-  bookrunner_emb_dim: 4
-  dropout: 0.25
 
 train:
   seeds: [0, 1, 2, 3, 4, 5, 6]

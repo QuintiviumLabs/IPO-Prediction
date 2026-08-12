@@ -58,16 +58,16 @@ class ModelConfig:
     use_gpr: bool = True
     gpr_mode: str = "lstm"          # "level" | "engineered" | "lstm"
     gating: str = "none"            # "none" | "film" (GPR modulates static & momentum)
-    # Sizes (kept deliberately small for N ~ 4k).
-    bookrunner_emb_dim: int = 6
-    static_hidden: int = 32
-    static_out: int = 16
-    momentum_hidden: int = 32
-    momentum_out: int = 16
-    gpr_hidden: int = 12
-    gpr_out: int = 8
-    fusion_hidden: tuple[int, ...] = (32, 16)
-    dropout: float = 0.2
+    # Sizes (kept deliberately small for N ~ 1.5k).
+    bookrunner_emb_dim: int = 4
+    static_hidden: int = 16
+    static_out: int = 8
+    momentum_hidden: int = 16
+    momentum_out: int = 8
+    gpr_hidden: int = 8
+    gpr_out: int = 4
+    fusion_hidden: tuple[int, ...] = (16, 8)
+    dropout: float = 0.25
     # Quantile heads (pinball loss). Median head doubles as the point forecast.
     quantiles: tuple[float, ...] = (0.1, 0.5, 0.9)
     # Multi-task loss weights, keyed by horizon; the main horizon gets 1.0.

@@ -176,7 +176,7 @@
   <figure>
     <div class="figcard">
     <svg viewBox="0 0 960 900" role="img"
-         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 40-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons, with the 1-month median as the point forecast.">
+         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 20-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons, with the 1-month median as the point forecast.">
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
@@ -228,15 +228,15 @@
 
       <!-- ===== Encoders ===== -->
       <rect x="20" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--static)" stroke-width="1.3"/>
-      <text x="160" y="266" text-anchor="middle" class="t-mono-b">banks → 6-d embedding, MLP → 16</text>
+      <text x="160" y="266" text-anchor="middle" class="t-mono-b">banks → 4-d embedding, MLP → 8</text>
       <text x="160" y="288" text-anchor="middle" class="t-sub">mean of embeddings over the deal's banks</text>
 
       <rect x="340" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--panel)" stroke-width="1.3"/>
-      <text x="480" y="266" text-anchor="middle" class="t-mono-b">MLP 32 → 16</text>
+      <text x="480" y="266" text-anchor="middle" class="t-mono-b">MLP 16 → 8</text>
       <text x="480" y="288" text-anchor="middle" class="t-sub">F3/F4 arrive as expanding-window z-scores</text>
 
       <rect x="660" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.3"/>
-      <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 12)</text>
+      <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 8)</text>
       <text x="800" y="288" text-anchor="middle" class="t-sub">ablations swap in: level only · 5 summaries</text>
 
       <!-- arrows to z chips -->
@@ -246,13 +246,13 @@
 
       <!-- ===== Representation chips ===== -->
       <rect x="70" y="334" width="180" height="38" rx="19" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.4"/>
-      <text x="160" y="358" text-anchor="middle" class="t-chip" fill="var(--static)">z_static · 16-d</text>
+      <text x="160" y="358" text-anchor="middle" class="t-chip" fill="var(--static)">z_static · 8-d</text>
 
       <rect x="390" y="334" width="180" height="38" rx="19" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.4"/>
-      <text x="480" y="358" text-anchor="middle" class="t-chip" fill="var(--panel)">z_mom · 16-d</text>
+      <text x="480" y="358" text-anchor="middle" class="t-chip" fill="var(--panel)">z_mom · 8-d</text>
 
       <rect x="716" y="334" width="168" height="38" rx="19" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.4"/>
-      <text x="800" y="358" text-anchor="middle" class="t-chip" fill="var(--risk)">z_gpr · 8-d</text>
+      <text x="800" y="358" text-anchor="middle" class="t-chip" fill="var(--risk)">z_gpr · 4-d</text>
 
       <!-- ===== FiLM gates (V2) ===== -->
       <line x1="160" y1="372" x2="160" y2="400" stroke="var(--muted)" stroke-width="1.3"/>
@@ -275,21 +275,21 @@
       <rect x="180" y="470" width="240" height="36" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.3"/>
       <rect x="420" y="470" width="240" height="36" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.3"/>
       <rect x="660" y="470" width="120" height="36" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.3"/>
-      <text x="300" y="493" text-anchor="middle" class="t-mono" fill="var(--static)">16</text>
-      <text x="540" y="493" text-anchor="middle" class="t-mono" fill="var(--panel)">16</text>
-      <text x="720" y="493" text-anchor="middle" class="t-mono" fill="var(--risk)">8</text>
-      <text x="796" y="493" class="t-mono-b">= 40-d</text>
+      <text x="300" y="493" text-anchor="middle" class="t-mono" fill="var(--static)">8</text>
+      <text x="540" y="493" text-anchor="middle" class="t-mono" fill="var(--panel)">8</text>
+      <text x="720" y="493" text-anchor="middle" class="t-mono" fill="var(--risk)">4</text>
+      <text x="796" y="493" class="t-mono-b">= 20-d</text>
       <text x="164" y="493" text-anchor="end" class="t-sub">concat</text>
 
       <!-- fusion -->
       <line x1="480" y1="506" x2="480" y2="530" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
       <rect x="330" y="534" width="300" height="62" rx="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>
       <text x="480" y="560" text-anchor="middle" class="t-big">FUSION MLP</text>
-      <text x="480" y="582" text-anchor="middle" class="t-sub">40 → 32 → 16 · ReLU · dropout</text>
+      <text x="480" y="582" text-anchor="middle" class="t-sub">20 → 16 → 8 · ReLU · dropout</text>
 
       <line x1="480" y1="596" x2="480" y2="618" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
       <rect x="352" y="622" width="256" height="36" rx="18" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.4"/>
-      <text x="480" y="645" text-anchor="middle" class="t-chip">shared 16-d representation</text>
+      <text x="480" y="645" text-anchor="middle" class="t-chip">shared 8-d representation</text>
 
       <!-- fan out to four heads -->
       <polyline points="480,658 480,676 140,686 140,700" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
@@ -406,7 +406,7 @@
     </div></li>
     <li><div>
       <b>Encode each source in its own arm</b>
-      <p>Banks become a mean of learned 6-d embeddings inside the static arm; the factor block
+      <p>Banks become a mean of learned 4-d embeddings inside the static arm; the factor block
       passes through a small MLP; a GRU reads the GPR window (with "level only" and "5 summaries"
       as ablation alternatives).</p>
     </div></li>
@@ -418,8 +418,8 @@
     </div></li>
     <li><div>
       <b>Fuse</b>
-      <p>The three representations are concatenated (16 + 16 + 8 = 40-d) and compressed by a small
-      MLP into one 16-d representation of the deal-in-its-moment.</p>
+      <p>The three representations are concatenated (8 + 8 + 4 = 20-d) and compressed by a small
+      MLP into one 8-d representation of the deal-in-its-moment.</p>
     </div></li>
     <li><div>
       <b>Emit a distribution, not a number</b>
