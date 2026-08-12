@@ -92,27 +92,67 @@ def main() -> None:
                              "1-month label and are dropped from training "
                              "(still used inside momentum factors)")
 
-    # ---- market.csv / gpr.csv ----
-    for name, df, col in (("market.csv", market, "close"), ("gpr.csv", gpr, "gpr")):
-        if df is None:
-            continue
-        if "date" not in df.columns or col not in df.columns:
-            errors.append(f"{name}: needs columns (date, {col})")
-            continue
-        dts = pd.to_datetime(df["date"], errors="coerce")
-        if dts.isna().any():
-            errors.append(f"{name}: unparseable dates")
-            continue
-        gap = dts.sort_values().diff().dt.days.dropna()
-        if len(gap) and gap.median() > 4:
-            warns.append(f"{name}: median gap {gap.median():.0f} days — the "
-                         "pipeline expects a DAILY series")
-        if ipos is not None and "first_trade_date" in ipos.columns:
-            first_ipo = pd.to_datetime(ipos["first_trade_date"], errors="coerce").min()
-            if pd.notna(first_ipo) and dts.min() >= first_ipo:
-                errors.append(f"{name}: series starts {dts.min().date()}, on/after "
-                              f"the first IPO ({first_ipo.date()}) — need history "
-                              "before it")
+    # ---- market.csv (per-market benchmarks) ----
+    if market is not None:
+        if "date" not in market.columns or "close" not in market.columns:
+            errors.append("market.csv: needs columns (date, [market,] close)")
+        else:
+            dts = pd.to_datetime(market["date"], errors="coerce")
+            if dts.isna().any():
+                errors.append("market.csv: unparseable dates")
+            elif "market" in market.columns and ipos is not None \
+                    and {"market", "first_trade_date"} <= set(ipos.columns):
+                missing_b = set(ipos["market"].astype(str)) \
+                    - set(market["market"].astype(str))
+                if missing_b:
+                    errors.append("market.csv: no benchmark series for markets "
+                                  f"{sorted(missing_b)} (one index per market, "
+                                  "long format: date, market, close)")
+                for m, g in market.groupby("market"):
+                    gd = pd.to_datetime(g["date"]).sort_values()
+                    gap = gd.diff().dt.days.dropna()
+                    if len(gap) and gap.median() > 4:
+                        warns.append(f"market.csv[{m}]: median gap "
+                                     f"{gap.median():.0f} days — expects DAILY")
+                    in_m = ipos[ipos["market"].astype(str) == str(m)]
+                    if len(in_m):
+                        first = pd.to_datetime(in_m["first_trade_date"],
+                                               errors="coerce").min()
+                        if pd.notna(first) and gd.min() >= first:
+                            errors.append(f"market.csv[{m}]: starts "
+                                          f"{gd.min().date()}, on/after that "
+                                          f"market's first IPO ({first.date()})")
+            else:
+                warns.append("market.csv: no 'market' column — ONE global "
+                             "benchmark will be used for every market "
+                             "(per-market indices recommended: date, market, close)")
+                if ipos is not None and "first_trade_date" in ipos.columns:
+                    first_ipo = pd.to_datetime(ipos["first_trade_date"],
+                                               errors="coerce").min()
+                    if pd.notna(first_ipo) and dts.min() >= first_ipo:
+                        errors.append(f"market.csv: series starts "
+                                      f"{dts.min().date()}, on/after the first "
+                                      f"IPO ({first_ipo.date()})")
+
+    # ---- gpr.csv ----
+    if gpr is not None:
+        if "date" not in gpr.columns or "gpr" not in gpr.columns:
+            errors.append("gpr.csv: needs columns (date, gpr)")
+        else:
+            dts = pd.to_datetime(gpr["date"], errors="coerce")
+            if dts.isna().any():
+                errors.append("gpr.csv: unparseable dates")
+            else:
+                gap = dts.sort_values().diff().dt.days.dropna()
+                if len(gap) and gap.median() > 4:
+                    warns.append(f"gpr.csv: median gap {gap.median():.0f} days "
+                                 "— the pipeline expects a DAILY series")
+                if ipos is not None and "first_trade_date" in ipos.columns:
+                    first_ipo = pd.to_datetime(ipos["first_trade_date"],
+                                               errors="coerce").min()
+                    if pd.notna(first_ipo) and dts.min() >= first_ipo:
+                        errors.append(f"gpr.csv: series starts {dts.min().date()}, "
+                                      f"on/after the first IPO ({first_ipo.date()})")
 
     # ---- deals.csv (optional) ----
     if deals is not None:

@@ -72,9 +72,13 @@ One row per IPO per day, first ~30 trading days after listing:
 then stack the results into one long CSV (dates YYYY-MM-DD).
 
 ### market.csv — from Bloomberg
-The benchmark index for market-adjustment, daily over your whole sample
-**starting well before your first IPO**: `date,close`.
-`=BDH("SPX Index","PX_LAST",start,end)` (or your market's index).
+One benchmark index **per market**, daily over your whole sample, **starting
+well before each market's first IPO**: `date,market,close` (long format —
+stack the indices). One BDH per index, e.g.:
+`=BDH("HSI Index","PX_LAST",start,end)` for `market=HK`,
+`=BDH("SPX Index","PX_LAST",start,end)` for `market=US`.
+The `market` labels must match the ones in ipos.csv. Targets become
+outperformance vs this benchmark ("grew to X× what the index grew to").
 
 ### gpr.csv — from the internet
 ```powershell

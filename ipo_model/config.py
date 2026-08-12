@@ -13,11 +13,19 @@ from typing import Any
 
 @dataclass
 class DataConfig:
-    # Target definition: log return from offer price to the close on the
-    # h-th trading day (h=1 is the first close), in excess of the market
-    # index over the same span (market_adjust=True). 1d / 3d / 1w / 1m.
+    # Target definition: log outperformance vs the IPO's OWN market's
+    # benchmark index (e.g. Hang Seng for HK deals) from offer price to the
+    # h-th trading day close: y = log((P_h/offer) / (I_h/I_0)), i.e. the log
+    # of the outperformance multiple — exp(y) = "grew to X times what the
+    # benchmark grew to". 1d / 3d / 1w / 1m. market_adjust=False -> raw.
     horizons: tuple[int, ...] = (1, 3, 5, 21)   # trading days; last is the main target
     market_adjust: bool = True
+    # Market-agnostic training: exclude the market one-hot from features so
+    # the model predicts general outperformance instead of market identity.
+    include_market_onehot: bool = False
+    # F1/F2 momentum returns: raw-from-offer per the factor spec, or
+    # benchmark-relative like the target (an ablation worth running).
+    momentum_market_adjust: bool = False
     # ---- Momentum factor block (F1-F4), all same-market unless noted ----
     momentum_max_deals: int = 10        # F1/F2: up to this many most recent IPOs...
     momentum_window_days: int = 90      # ...within this many calendar days

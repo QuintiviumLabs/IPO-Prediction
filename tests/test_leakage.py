@@ -16,7 +16,7 @@ def test_rows_sorted_and_labeled(fs):
 def test_f1_momentum_recomputed_by_hand(fs, raw, cfg):
     """Recompute F1_med_1d / F1_vw_1d for sampled targets straight from the
     CSVs, applying the observability rule (h-th close strictly before t0)."""
-    ipos = raw.ipos.sort_values("first_trade_date").reset_index(drop=True)
+    ipos = raw.ipos.sort_values("first_trade_date", kind="stable").reset_index(drop=True)
     prices = raw.prices.sort_values(["ipo_id", "date"])
     dates_by_id = {k: v["date"].to_numpy() for k, v in prices.groupby("ipo_id")}
     close_by_id = {k: v["close"].to_numpy() for k, v in prices.groupby("ipo_id")}
@@ -32,7 +32,9 @@ def test_f1_momentum_recomputed_by_hand(fs, raw, cfg):
         cand = ipos[(ipos["first_trade_date"] < t0)
                     & (ipos["first_trade_date"] >= t0 - win)
                     & (ipos["market"] == mkt)]
-        cand = cand.sort_values("first_trade_date").iloc[::-1][: cfg.data.momentum_max_deals]
+        # stable sort: same-date ties must break identically to the builder
+        cand = cand.sort_values("first_trade_date", kind="stable")
+        cand = cand.iloc[::-1][: cfg.data.momentum_max_deals]
         rets, w = [], []
         for _, r in cand.iterrows():
             d = dates_by_id[r["ipo_id"]]
@@ -92,16 +94,42 @@ def test_purged_walk_forward_no_overlap(fs, cfg):
     assert len(cat) == len(set(cat))
 
 
-def test_targets_are_market_excess(fs, raw, cfg):
-    """Recompute one label by hand from the raw CSVs."""
-    i = len(fs) // 2
+def test_targets_are_own_market_benchmark_relative(fs, raw, cfg):
+    """Recompute labels by hand: each IPO must be adjusted by ITS market's
+    benchmark, at several horizons, for IPOs from different markets."""
+    h_main = cfg.data.horizons[-1]
+    checked_markets = set()
+    for i in range(0, len(fs), 97):
+        ipo_id = fs.ids[i]
+        row = raw.ipos[raw.ipos["ipo_id"] == ipo_id].iloc[0]
+        px = raw.prices[raw.prices["ipo_id"] == ipo_id].sort_values("date")
+        bench = raw.market
+        if "market" in bench.columns:
+            bench = bench[bench["market"] == row["market"]]
+        mkt = bench.sort_values("date").set_index("date")["close"]
+        for h in cfg.data.horizons:
+            gross = np.log(px["close"].iloc[h - 1] / row["offer_price"])
+            m_end = mkt[mkt.index <= px["date"].iloc[h - 1]].iloc[-1]
+            m_prev = mkt[mkt.index < row["first_trade_date"]].iloc[-1]
+            expected = gross - np.log(m_end / m_prev)
+            assert np.isclose(fs.y[h][i], expected, atol=1e-10), \
+                f"{ipo_id} ({row['market']}) horizon {h}"
+        checked_markets.add(row["market"])
+    assert len(checked_markets) >= 2, "sample should span multiple markets"
+
+
+def test_exp_of_target_is_outperformance_multiple(fs, raw, cfg):
+    """exp(y) must equal (gross stock multiple) / (gross benchmark multiple)."""
+    i = len(fs) // 3
     ipo_id = fs.ids[i]
     row = raw.ipos[raw.ipos["ipo_id"] == ipo_id].iloc[0]
     px = raw.prices[raw.prices["ipo_id"] == ipo_id].sort_values("date")
+    bench = raw.market[raw.market["market"] == row["market"]] \
+        if "market" in raw.market.columns else raw.market
+    mkt = bench.sort_values("date").set_index("date")["close"]
     h = cfg.data.horizons[-1]
-    gross = np.log(px["close"].iloc[h - 1] / row["offer_price"])
-    mkt = raw.market.set_index("date")["close"]
+    stock_mult = px["close"].iloc[h - 1] / row["offer_price"]
     m_end = mkt[mkt.index <= px["date"].iloc[h - 1]].iloc[-1]
     m_prev = mkt[mkt.index < row["first_trade_date"]].iloc[-1]
-    expected = gross - np.log(m_end / m_prev)
-    assert np.isclose(fs.y[h][i], expected, atol=1e-10)
+    bench_mult = m_end / m_prev
+    assert np.isclose(np.exp(fs.y[h][i]), stock_mult / bench_mult, rtol=1e-9)

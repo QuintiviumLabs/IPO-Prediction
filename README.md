@@ -7,9 +7,11 @@
 A framework for predicting IPO aftermarket returns from three information
 sources, with gradient-boosted baselines the deep model has to beat:
 
-- **Static arm** — sector flags (TMT, healthcare), market one-hot, bookrunner
-  identity as a multi-hot binary vector (deals with 1+ banks) fed through a
-  bag-of-embeddings projection, bookrunner count.
+- **Static arm** — sector flags (TMT, healthcare), bookrunner identity as a
+  multi-hot binary vector (deals with 1+ banks) fed through a
+  bag-of-embeddings projection, bookrunner count. (Market one-hot available
+  behind `data.include_market_onehot`, off by default for market-agnostic
+  training.)
 - **Momentum arm** — an engineered market-state factor block (all same-market,
   all strictly pre-pricing), encoded by a small MLP:
   - **F1 · Recent deal aftermarket performance**: over the ≤10 most recent
@@ -39,12 +41,18 @@ and momentum representations.
 
 ## Target definition
 
-`y = log(close_h / offer_price) − market log return over the same span`
+`y = log( (close_h / offer_price) / (I_h / I_0) )`
 
-i.e. log return from the offer price to the h-th daily close, in excess of
-the market index (anchored at the last market close before the first trade).
-Set `data.market_adjust: false` for raw returns. Horizon 1 is the first-day
-pop. F1/F2 momentum returns are raw-from-offer per the factor spec.
+Log **outperformance vs the IPO's own market's benchmark index** (e.g. Hang
+Seng for HK deals, S&P 500 for US) from offer price to the h-th daily close;
+I_0 is the benchmark close just before the first trade. `exp(y)` is the
+outperformance multiple — exp(y)=1.03 means the deal grew to 1.03× what its
+benchmark grew to. This makes the target market-agnostic: the model predicts
+general outperformance, not each market's index moves. The market one-hot is
+likewise excluded from features by default (`data.include_market_onehot`).
+Set `data.market_adjust: false` for raw returns. F1/F2 momentum returns are
+raw-from-offer per the factor spec (`data.momentum_market_adjust: true`
+switches them to benchmark-relative — a worthwhile ablation).
 
 ## Evaluation
 
@@ -106,7 +114,7 @@ Drop CSVs in a directory (see `ipo_model/data/features.py` for details):
 | `ipos.csv` | `ipo_id`, `first_trade_date`, `offer_price`, `market`, `deal_size` (proceeds), `is_tmt`, `is_healthcare`, `bk_*` (one binary column per bookrunner) |
 | `prices.csv` | `ipo_id`, `date`, `close` (daily closes; ~26 trading days per IPO suffices) |
 | `gpr.csv` | `date`, `gpr` (daily index level — see `scripts/prepare_gpr.py`) |
-| `market.csv` | `date`, `close` (index level for market adjustment) |
+| `market.csv` | `date`, `market`, `close` — one benchmark index per market (Hang Seng rows for HK, S&P rows for US, …); a single global `date`, `close` series is also accepted |
 | `deals.csv` *(optional)* | `date`, `market`, `sector` (`tmt`/`healthcare`/`other`), `proceeds` — all deal types (IPO, follow-on, convertible) for F3/F4; without it, supply factors fall back to the IPO record only |
 
 Data caveats the code cannot check for you:

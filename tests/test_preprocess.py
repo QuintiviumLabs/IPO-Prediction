@@ -35,8 +35,23 @@ def test_engineered_table_contains_factor_block(fs, cfg):
                 "f3_cnt_3m", "f3_accel", "f4_sec_share", "f4_sec_cnt_30d",
                 "gpr_level"]:
         assert col in X.columns
+    # Market-agnostic by default: no market identity columns.
     for name in fs.market_names:
-        assert f"mkt_{name}" in X.columns
+        assert f"mkt_{name}" not in X.columns
+
+
+def test_market_onehot_flag(fs, cfg):
+    """Market identity enters features only when explicitly enabled."""
+    train_idx = np.arange(len(fs) // 2)
+    off = FoldScaler.fit(fs, train_idx, cfg.data)
+    on_cfg = cfg.override(**{"data.include_market_onehot": True})
+    on = FoldScaler.fit(fs, train_idx, on_cfg.data)
+    b_off, _ = off.static_matrix(fs)
+    b_on, _ = on.static_matrix(fs)
+    assert b_on.shape[1] == b_off.shape[1] + len(fs.market_names)
+    X_on = engineered_table(fs, on)
+    for name in fs.market_names:
+        assert f"mkt_{name}" in X_on.columns
 
 
 def test_raw_table_adds_gpr_window(fs, cfg):
