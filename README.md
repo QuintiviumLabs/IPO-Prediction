@@ -3,6 +3,8 @@
 > Setting this up on a Windows laptop with Bloomberg? Start with
 > **[WINDOWS_QUICKSTART.md](WINDOWS_QUICKSTART.md)** — environment creation,
 > data assembly from Bloomberg, and migration in one page.
+> **[docs/BLOOMBERG_DATA.md](docs/BLOOMBERG_DATA.md)** covers where each
+> field comes from on the terminal.
 
 A framework for predicting IPO aftermarket returns from three information
 sources, with gradient-boosted baselines the deep model has to beat:
@@ -111,7 +113,7 @@ Drop CSVs in a directory (see `ipo_model/data/features.py` for details):
 
 | file | columns |
 |---|---|
-| `ipos.csv` | `ipo_id`, `first_trade_date`, `offer_price`, `market`, `deal_size` (proceeds), `is_tmt`, `is_healthcare`, `bk_*` (one binary column per bookrunner) |
+| `ipos.csv` | `ipo_id`, `first_trade_date`, `offer_price`, `market`, `deal_size` (proceeds), `is_tmt`, `is_healthcare`, `bk_*` (one binary column per bookrunner); optional `is_target` (0 = momentum-universe only: feeds F1–F4, never modelled) |
 | `prices.csv` | `ipo_id`, `date`, `close` (daily closes; ~26 trading days per IPO suffices) |
 | `gpr.csv` | `date`, `gpr` (daily index level — see `scripts/prepare_gpr.py`) |
 | `market.csv` | `date`, `market`, `close` — one benchmark index per market (Hang Seng rows for HK, S&P rows for US, …); a single global `date`, `close` series is also accepted |

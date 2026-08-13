@@ -64,12 +64,30 @@ Create a folder `data\` containing these files (exact column names):
 | `deal_size` | IPO proceeds (any consistent unit) |
 | `is_tmt`, `is_healthcare` | 0 or 1 |
 | `bk_goldman`, `bk_ms`, … | one 0/1 column per bookrunner (any names starting `bk_`) |
+| `is_target` *(optional)* | 1 = model this deal; 0 = momentum-universe only |
+| `bbg_ticker` *(optional)* | Bloomberg ticker if different from `ipo_id` |
+
+`is_target=0` rows are other IPOs in the same market that you are **not**
+modelling. They make the F1/F2 "recent deals" pool reflect the whole market
+instead of just your sample, need only ~6 trading days of prices, and can
+leave `deal_size` / sector / bookrunner columns blank. See
+[docs/BLOOMBERG_DATA.md](docs/BLOOMBERG_DATA.md).
 
 ### prices.csv — from Bloomberg
 One row per IPO per day, first ~30 trading days after listing:
 `ipo_id,date,close`. In Excel per ticker:
 `=BDH("TICKER Equity","PX_LAST",first_trade_date,first_trade_date+45,"Days=T")`
 then stack the results into one long CSV (dates YYYY-MM-DD).
+
+For 1,500+ deals, script it instead (Terminal must be running):
+```powershell
+pip install --index-url https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
+pip install xbbg
+python scripts\pull_bloomberg.py --data data --benchmarks "HK=HSI Index,US=SPX Index" --limit 5
+```
+Inspect those 5 deals, then re-run without `--limit`. It also writes
+`market.csv`, resumes if interrupted, and logs bad tickers rather than
+stopping.
 
 ### market.csv — from Bloomberg
 One benchmark index **per market**, daily over your whole sample, **starting

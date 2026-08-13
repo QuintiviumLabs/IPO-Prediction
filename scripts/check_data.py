@@ -23,6 +23,7 @@ def main() -> None:
     d = Path(args.data)
     errors: list[str] = []
     warns: list[str] = []
+    infos: list[str] = []
 
     def need(path: Path) -> pd.DataFrame | None:
         if not path.exists():
@@ -70,6 +71,18 @@ def main() -> None:
             if len(small):
                 warns.append("ipos.csv: markets with < 30 IPOs (momentum factors "
                              f"will be thin there): {dict(small)}")
+        if "is_target" in ipos.columns:
+            n_t = int((ipos["is_target"].fillna(1) != 0).sum())
+            n_u = len(ipos) - n_t
+            infos.append(f"{n_t} modelled IPOs + {n_u} momentum-universe rows "
+                         "(is_target=0: feed F1-F4, never trained on)")
+            if n_t == 0:
+                errors.append("ipos.csv: every row has is_target=0 — nothing to model")
+        else:
+            warns.append("ipos.csv: no is_target column — every row is both a "
+                         "modelling target and part of the F1/F2 recent-deal "
+                         "pool. Add is_target=0 rows to widen the momentum "
+                         "universe without training on them.")
 
     # ---- prices.csv ----
     if prices is not None and ipos is not None:
@@ -169,6 +182,8 @@ def main() -> None:
         warns.append("no deals.csv — F3/F4 supply factors fall back to IPO-only")
 
     print(f"\n{'='*60}\nData check: {d}/")
+    for i in infos:
+        print(f"  info     {i}")
     for e in errors:
         print(f"  ERROR    {e}")
     for w in warns:
