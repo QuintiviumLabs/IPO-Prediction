@@ -70,6 +70,9 @@ class GPRArm(nn.Module):
     def __init__(self, cfg: ModelConfig, n_engineered: int):
         super().__init__()
         self.mode = cfg.gpr_mode
+        self.input_mode = cfg.gpr_input
+        if self.input_mode not in ("level", "change"):
+            raise ValueError(f"Unknown gpr_input: {self.input_mode}")
         if self.mode == "level":
             self.net = nn.Linear(1, cfg.gpr_out)
         elif self.mode == "engineered":
@@ -86,6 +89,8 @@ class GPRArm(nn.Module):
             return self.net(seq[:, -1:])
         if self.mode == "engineered":
             return self.net(feats)
+        if self.input_mode == "change":  # day-over-day risk shocks, not height
+            seq = seq[:, 1:] - seq[:, :-1]
         out, _ = self.gru(seq.unsqueeze(2))
         return self.head(out[:, -1])
 
@@ -170,3 +175,29 @@ class ThreeArmModel(nn.Module):
             parts.append(z_gpr)
         rep = self.fusion(torch.cat(parts, dim=1))
         return {h: self.heads[str(h)](rep) for h in self.horizons}
+
+    # ---- group-lasso input sparsity ----
+
+    def _input_layers(self) -> list[nn.Linear]:
+        layers = [self.static_arm.net[0]]
+        if self.cfg.use_momentum:
+            layers.append(self.momentum_arm.net[0])
+        if self.cfg.use_gpr and self.cfg.gpr_mode == "engineered":
+            layers.append(self.gpr_arm.net[0])
+        return layers
+
+    def input_l1(self) -> torch.Tensor:
+        """Group-lasso penalty: the L2 norm of each input feature's first-layer
+        weight column, summed. Drives whole columns to zero — i.e. actually
+        removes features, which dropout and weight decay never do."""
+        pen = torch.zeros((), device=next(self.parameters()).device)
+        for lin in self._input_layers():
+            pen = pen + lin.weight.norm(dim=0).sum()
+        return pen
+
+    def momentum_input_norms(self) -> "np.ndarray | None":
+        """Per-momentum-feature first-layer column norms (for prune reports)."""
+        if not self.cfg.use_momentum:
+            return None
+        import numpy as np
+        return self.momentum_arm.net[0].weight.norm(dim=0).detach().cpu().numpy()

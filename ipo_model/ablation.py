@@ -46,6 +46,9 @@ RUNGS: dict[str, dict[str, Any]] = {
                              "model.gpr_mode": "level"},
     "5_full_v1": {"model.use_momentum": True, "model.use_gpr": True,
                   "model.gpr_mode": "lstm", "model.gating": "none"},
+    "5b_full_gpr_change": {"model.use_momentum": True, "model.use_gpr": True,
+                           "model.gpr_mode": "lstm", "model.gpr_input": "change",
+                           "model.gating": "none"},
     "6_full_v2_film": {"model.use_momentum": True, "model.use_gpr": True,
                        "model.gpr_mode": "lstm", "model.gating": "film"},
 }

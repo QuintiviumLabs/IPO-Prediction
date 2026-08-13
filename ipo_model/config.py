@@ -74,7 +74,17 @@ class ModelConfig:
     momentum_groups: tuple[str, ...] = ("f1", "f2", "f3", "f4")
     use_gpr: bool = True
     gpr_mode: str = "lstm"          # "level" | "engineered" | "lstm"
+    # What the lstm-mode GPR arm consumes: raw standardized "level"s, or
+    # day-over-day "change"s (first differences of the window). Risk shocks
+    # are plausibly what matters, not the index's absolute height. Ignored by
+    # the "level"/"engineered" modes (engineered already carries d5/dW).
+    gpr_input: str = "level"
     gating: str = "none"            # "none" | "film" (GPR modulates static & momentum)
+    # Group-lasso strength on first-layer input columns (static + momentum +
+    # engineered-GPR). Unlike dropout/weight decay, this actually ZEROES the
+    # weights of unhelpful features — structured pruning, reported per fold.
+    # 0 disables; ~1e-3 is a sensible starting point at N ~ 1k.
+    l1_input: float = 0.0
     # Sizes (kept deliberately small for N ~ 1.5k).
     bookrunner_emb_dim: int = 4
     static_hidden: int = 16

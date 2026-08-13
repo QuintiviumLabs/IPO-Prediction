@@ -96,6 +96,8 @@ def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
                 preds, {h: y[bt] for h, y in y_train.items()},
                 cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
             )
+            if cfg.model.l1_input > 0:  # structured feature pruning
+                loss = loss + cfg.model.l1_input * model.input_l1()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
@@ -144,6 +146,13 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
 
         q_ens = np.mean(preds_per_seed, axis=0)
         y_test = fs.y[main_h][fold.test_idx]
+        if cfg.model.l1_input > 0 and cfg.model.use_momentum and verbose:
+            norms = model.momentum_input_norms()  # last seed's model
+            names = [n for n in fs.momentum_names
+                     if n.split("_")[0] in cfg.model.momentum_groups]
+            dead = [n for n, v in zip(names, norms) if v < 0.02 * norms.max()]
+            print(f"    l1_input pruned {len(dead)}/{len(names)} momentum "
+                  f"features{': ' + ', '.join(dead) if dead else ''}")
         m = evaluate(y_test, q_ens, cfg.model.quantiles)
         results.append(FoldResult(fold=k, test_idx=fold.test_idx, q_pred=q_ens,
                                   per_seed_val_loss=val_losses, metrics=m))
