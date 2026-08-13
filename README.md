@@ -68,9 +68,29 @@ model per seed, quantile forecasts ensembled across seeds. Expanding-window
 z-scores (F3/F4) use only each row's past by construction — verified by a
 prefix-stability test.
 
-Metrics: Spearman rank IC, hit rate, decile spread, MAE/RMSE, pinball loss,
-10–90 interval coverage. For a cross-sectional signal, rank IC and decile
-spread are the ones that matter.
+**Metrics** (`ipo_model/training/metrics.py`). Ordering — Spearman rank IC
+(with p-value), Pearson IC, decile/quintile spread, top and bottom bucket
+means, hit rate. Level — MAE, median AE, RMSE, bias, and an OOS R² against
+the natural null of predicting zero outperformance. Distribution — pinball
+loss, interval coverage vs nominal, which tail is missing
+(`frac_below_lo` / `frac_above_hi`), mean interval width, and the Winkler
+interval score. For a cross-sectional signal, rank IC and bucket spread are
+the ones that decide.
+
+**Significance.** A point estimate without an error bar is not a result at
+this sample size, so the pipeline ships the machinery to test every number:
+`ic_by_period` turns one pooled IC into a quarterly IC series, `t_test`
+applies Newey-West standard errors, `bootstrap_ci` gives block-aware
+distribution-free intervals, `compare_models` runs a paired
+Diebold-Mariano test plus a paired IC bootstrap between two rungs on
+identical deals, and `benjamini_hochberg` controls the false-discovery rate
+when many rungs are compared at once.
+
+> **Read the fold-mean IC, not the pooled IC.** Pooling mixes deals across
+> folds; because each fold's model is trained on different data, level
+> differences between folds can inflate the pooled correlation with no real
+> within-fold skill. The `00_naive_const` rung demonstrates this — pooled IC
+> looks positive, fold-wise IC is correctly undefined.
 
 ## Quick start
 
@@ -91,7 +111,11 @@ python scripts/run_baseline.py --data data --engine both
 python scripts/run_full.py --data data --seeds 0 1 2
 
 # the whole ablation ladder -> results/ablations.{csv,md}
+# (also saves per-deal predictions to results/predictions/)
 python scripts/run_ablations.py --data data --seeds 0 1 2
+
+# significance tests, paired comparisons, FDR — no retraining needed
+python scripts/analyze_results.py --results results
 
 pytest
 ```
@@ -100,6 +124,8 @@ pytest
 
 | rung | what it tests |
 |---|---|
+| 00_naive_const | predict the training median for every deal — no ordering at all, so it floors the *distribution* metrics |
+| 00_naive_f1 | one-factor regression on recent same-market IPO performance — the floor that matters: does the full model beat the single obvious signal? |
 | 0_lgbm / 0_xgb | engineered features + trees, two engines: the baseline, engine-robust |
 | 0_lgbm_raw / 0_xgb_raw | + the raw GPR window as columns: does unsummarized GPR help trees? |
 | 1_static | deal characteristics alone |
@@ -158,6 +184,7 @@ ipo_model/
   data/splits.py         purged walk-forward CV
   models/model.py        three arms, FiLM, quantile heads
   training/{losses,metrics,loop}.py
+  results_io.py          per-deal prediction persistence (post-hoc analysis)
   baselines/{lgbm,xgb}.py  ablation 0 (two tree engines, shared fold loop)
   extras/                optional rungs: regularized linear, TabPFN
   diagnostics.py         feature importance + failure slices

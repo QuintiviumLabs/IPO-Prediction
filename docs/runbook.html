@@ -360,7 +360,11 @@ python scripts\run_full.py --data data --config configs\small.yaml --seeds 0
 <span class="cmt"># 3. the main run: every rung, full seed ensemble -> results\ablations.md</span>
 python scripts\run_ablations.py --data data --config configs\small.yaml
 
-<span class="cmt"># 4. why it behaved that way</span>
+<span class="cmt"># 4. significance tests + paired comparisons (reads saved predictions,
+#    so this is seconds and needs no retraining)</span>
+python scripts\analyze_results.py --results results
+
+<span class="cmt"># 5. why it behaved that way</span>
 python scripts\diagnose.py --data data --config configs\small.yaml</code></pre>
 
   <div class="tablewrap">
@@ -369,7 +373,8 @@ python scripts\diagnose.py --data data --config configs\small.yaml</code></pre>
     <tbody>
       <tr><td><code>run_baseline.py</code></td><td class="num-col">&lt; 1 min</td><td>Printed metrics per fold</td></tr>
       <tr><td><code>run_full.py --seeds 0</code></td><td class="num-col">~1 min</td><td>Printed metrics per fold</td></tr>
-      <tr><td><code>run_ablations.py</code></td><td class="num-col">20–40 min</td><td><code>results\ablations.md</code> and <code>.csv</code></td></tr>
+      <tr><td><code>run_ablations.py</code></td><td class="num-col">20–40 min</td><td><code>results\ablations.md</code> + <code>predictions\</code></td></tr>
+      <tr><td><code>analyze_results.py</code></td><td class="num-col">&lt; 1 min</td><td><code>results\analysis.md</code>, <code>significance.csv</code></td></tr>
       <tr><td><code>diagnose.py</code></td><td class="num-col">5–15 min</td><td><code>results\diagnostics\*.csv</code></td></tr>
     </tbody>
   </table>
@@ -385,7 +390,7 @@ python scripts\diagnose.py --data data --config configs\small.yaml</code></pre>
   <table>
     <thead><tr><th>Metric</th><th>What it means</th><th>What is good</th></tr></thead>
     <tbody>
-      <tr><td><code>rank_ic</code></td><td>Correlation between predicted and realised ranking of deals — the headline number</td><td class="num-col">0.05–0.15 is a real result on live data</td></tr>
+      <tr><td><code>rank_ic</code></td><td>Correlation between predicted and realised ranking of deals — the headline number. Read the <em>fold mean</em>, not the pooled value</td><td class="num-col">0.05–0.15 is a real result on live data</td></tr>
       <tr><td><code>decile_spread</code></td><td>Top-decile minus bottom-decile realised outperformance</td><td class="num-col">Positive and stable across folds</td></tr>
       <tr><td><code>coverage</code></td><td>How often the truth landed inside the predicted band</td><td class="num-col">Close to <code>nominal_coverage</code></td></tr>
       <tr><td><code>mae</code></td><td>Average size of the miss</td><td class="num-col">Lower, but noisy on fat tails</td></tr>
@@ -395,12 +400,19 @@ python scripts\diagnose.py --data data --config configs\small.yaml</code></pre>
 
   <div class="callout">
     <p><b>The one comparison that matters.</b> The deep rungs must beat rung
-    <code>0_lgbm</code>. If they do not, the honest finding is that engineered features and
-    gradient boosting are sufficient — which is a perfectly publishable result, and the
+    <code>0_lgbm</code> — and both must beat <code>00_naive_f1</code>, the one-factor
+    regression on recent same-market IPO performance. If they do not, the honest finding is
+    that simpler methods are sufficient, which is a perfectly publishable result, and the
     ablation ladder is what lets you say it with evidence.</p>
     <p>Read the <em>standard deviation</em> too. A mean rank IC of 0.12 ± 0.02 is a signal;
     0.12 ± 0.20 is one lucky fold.</p>
   </div>
+
+  <p><code>analysis.md</code> is where the claims get tested. It reports, per rung, a
+  Newey-West t-test of the quarterly IC series, a year-blocked bootstrap interval, and a
+  paired comparison against the baseline on identical deals — plus Benjamini-Hochberg
+  q-values, because comparing ten rungs means ten chances at a spurious winner. A rung with
+  a good IC but <code>q &gt; 0.05</code> has not been shown to work.</p>
 
   <p>Then <code>results\diagnostics\</code>: <code>permutation_importance.csv</code> ranks
   features by how much rank IC drops when each is shuffled — a <em>negative</em> value
