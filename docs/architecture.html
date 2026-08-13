@@ -165,7 +165,8 @@
       How one target IPO's observable world — its deal traits, the state of its own IPO
       market (factors F1–F4), and the geopolitical backdrop — becomes a forecast
       distribution of <em>outperformance vs its own market's benchmark index</em> at four
-      horizons, with the 1-month outperformance as the target.
+      horizons, with the 1-month outperformance as the target — anchored at the offer
+      price (includes the first-day pop) or at the first close (aftermarket drift only).
     </p>
     <div class="legend">
       <span><i class="swatch" style="background:var(--static)"></i> deal traits (static)</span>
@@ -176,8 +177,8 @@
 
   <figure>
     <div class="figcard">
-    <svg viewBox="0 0 960 900" role="img"
-         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 20-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons, with the 1-month median as the point forecast.">
+    <svg viewBox="0 0 960 944" role="img"
+         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 20-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons; the 1-month median is the point forecast, optionally mapped back from rank space and conformally calibrated per tail.">
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
@@ -213,14 +214,14 @@
       <text x="356" y="141" class="t-mono">F2  break rate · downside depth</text>
       <text x="356" y="160" class="t-mono">F3  supply: count · proceeds · accel</text>
       <text x="356" y="179" class="t-mono">F4  sector density (3m · 30d)</text>
-      <text x="356" y="201" class="t-sub">≤10 same-market deals, 90 days · observable returns only</text>
+      <text x="356" y="201" class="t-sub">≤10 same-market deals, 90d · universe rows widen pool</text>
 
       <!-- C: geopolitical risk -->
       <rect x="660" y="78" width="280" height="134" rx="8" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.3"/>
       <text x="676" y="102" class="t-title" fill="var(--risk)">GEOPOLITICAL RISK</text>
       <polyline points="676,162 700,156 724,160 748,148 772,154 796,136 820,144 844,130 868,138 892,126" fill="none" stroke="var(--risk)" stroke-width="1.8"/>
       <circle cx="892" cy="126" r="3.4" fill="var(--risk)"/>
-      <text x="676" y="198" class="t-sub">daily Caldara–Iacoviello GPR index, last 21 trading days</text>
+      <text x="676" y="198" class="t-sub">daily GPR index, last 21 days · levels or Δ (config)</text>
 
       <!-- arrows into encoders -->
       <line x1="160" y1="212" x2="160" y2="236" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
@@ -305,8 +306,8 @@
       <line x1="88" y1="751" x2="88" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
       <circle cx="140" cy="760" r="4.6" fill="var(--muted)"/>
       <line x1="192" y1="751" x2="192" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
-      <text x="140" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
-      <text x="140" y="818" text-anchor="middle" class="t-sub">aux — the pop</text>
+      <text x="140" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₂₀ · q₅₀ · q₈₀</text>
+      <text x="140" y="818" text-anchor="middle" class="t-sub">aux · pop (offer anchor)</text>
 
       <rect x="267" y="704" width="200" height="96" rx="8" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
       <text x="367" y="728" text-anchor="middle" class="t-title" fill="var(--muted)">3 DAYS</text>
@@ -314,7 +315,7 @@
       <line x1="315" y1="751" x2="315" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
       <circle cx="367" cy="760" r="4.6" fill="var(--muted)"/>
       <line x1="419" y1="751" x2="419" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
-      <text x="367" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="367" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₂₀ · q₅₀ · q₈₀</text>
       <text x="367" y="818" text-anchor="middle" class="t-sub">aux</text>
 
       <rect x="493" y="704" width="200" height="96" rx="8" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
@@ -323,7 +324,7 @@
       <line x1="541" y1="751" x2="541" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
       <circle cx="593" cy="760" r="4.6" fill="var(--muted)"/>
       <line x1="645" y1="751" x2="645" y2="769" stroke="var(--muted)" stroke-width="1.5"/>
-      <text x="593" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="593" y="789" text-anchor="middle" class="t-mono" fill="var(--muted)">q₂₀ · q₅₀ · q₈₀</text>
       <text x="593" y="818" text-anchor="middle" class="t-sub">aux</text>
 
       <rect x="720" y="704" width="200" height="96" rx="8" fill="var(--panel-soft)" stroke="var(--ink)" stroke-width="2"/>
@@ -332,12 +333,16 @@
       <line x1="768" y1="751" x2="768" y2="769" stroke="var(--ink)" stroke-width="1.6"/>
       <circle cx="820" cy="760" r="6" fill="var(--ink)"/>
       <line x1="872" y1="751" x2="872" y2="769" stroke="var(--ink)" stroke-width="1.6"/>
-      <text x="820" y="789" text-anchor="middle" class="t-mono">q₁₀ · q₅₀ · q₉₀</text>
+      <text x="820" y="789" text-anchor="middle" class="t-mono">q₂₀ · q₅₀ · q₈₀</text>
 
-      <line x1="820" y1="800" x2="820" y2="824" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#arr)"/>
-      <rect x="682" y="828" width="276" height="40" rx="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"/>
-      <text x="820" y="853" text-anchor="middle" class="t-chip">ŷ = q₅₀ · band = [q₁₀, q₉₀]</text>
-      <text x="360" y="856" text-anchor="middle" class="t-sub">horizons in trading days · quantiles cannot cross by construction · forecasts averaged over 5 seeds</text>
+      <line x1="820" y1="800" x2="820" y2="812" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#arr)"/>
+      <rect x="200" y="816" width="720" height="48" rx="8" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="6 4"/>
+      <text x="560" y="836" text-anchor="middle" class="t-mono-b">POST · inverse normal-score map · per-tail conformal calibration</text>
+      <text x="560" y="854" text-anchor="middle" class="t-sub">optional: train.label_transform=normal_score · calibrate_intervals.py (walk-forward, asymmetric margins)</text>
+      <line x1="820" y1="864" x2="820" y2="878" stroke="var(--ink)" stroke-width="1.5" marker-end="url(#arr)"/>
+      <rect x="682" y="882" width="276" height="40" rx="20" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"/>
+      <text x="820" y="907" text-anchor="middle" class="t-chip">ŷ = q₅₀ · band = [q₂₀, q₈₀]</text>
+      <text x="360" y="907" text-anchor="middle" class="t-sub">quantile levels configurable (20/50/80 at ~1k deals) · quantiles cannot cross · seed-ensembled</text>
     </svg>
     </div>
     <figcaption>
@@ -347,6 +352,10 @@
       with every return admitted only if it was observable before t₀, and F3/F4 z-scored against
       each market's own expanding history. Dashed paths exist only in the V2 configuration:
       FiLM lets the risk regime decide how loudly deal quality and market momentum speak.
+      During training, an optional group-lasso penalty (<code>l1_input</code>) zeroes the
+      first-layer columns of inputs that earn no keep — structured pruning, reported per
+      fold — and standardized features can be clipped at ±3σ so one moonshot deal cannot
+      ride the mean-type momentum features into every prediction that follows it.
     </figcaption>
   </figure>
 
@@ -356,7 +365,7 @@
   <figure>
     <div class="figcard">
     <svg viewBox="0 0 960 190" role="img"
-         aria-label="Example forecast on a return axis: the 10th percentile at minus 11.4 percent, the median point forecast at plus 2.8 percent, and the 90th percentile at plus 17.9 percent form an 80 percent interval around the point forecast.">
+         aria-label="Example forecast on a return axis: the 20th percentile at minus 11.4 percent, the median point forecast at plus 2.8 percent, and the 80th percentile at plus 17.9 percent form a 60 percent interval around the point forecast.">
       <defs>
         <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
@@ -379,11 +388,11 @@
       <line x1="686" y1="80" x2="686" y2="126" stroke="var(--panel)" stroke-width="1.8"/>
       <circle cx="445" cy="103" r="7" fill="var(--ink)"/>
 
-      <text x="218" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₁₀ = −11.4%</text>
-      <text x="686" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₉₀ = +17.9%</text>
+      <text x="218" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₂₀ = −11.4%</text>
+      <text x="686" y="70" text-anchor="middle" class="t-mono" fill="var(--panel)">q₈₀ = +17.9%</text>
       <text x="445" y="42" text-anchor="middle" class="t-mono-b">q₅₀ = +2.8% — the point forecast</text>
       <line x1="445" y1="50" x2="445" y2="92" stroke="var(--ink)" stroke-width="1.2"/>
-      <text x="452" y="180" text-anchor="middle" class="t-sub">band = the model's own 80% uncertainty for this deal</text>
+      <text x="452" y="180" text-anchor="middle" class="t-sub">band = the model's own 60% uncertainty, conformally calibrated per tail</text>
     </svg>
     </div>
     <figcaption>
@@ -405,7 +414,9 @@
       same-market history — a recent deal's h-day return enters F1/F2 only if its h-th close
       predates t₀ — plus 21 days of the daily GPR index. Nothing dated t₀ or later is admitted;
       <code>features.py</code> enforces the cutoff and a prefix-stability test proves even the
-      expanding z-scores are unchanged when future IPOs are deleted from the dataset.</p>
+      expanding z-scores are unchanged when future IPOs are deleted from the dataset.
+      The target anchors at the offer price (includes the pop) or at the first close
+      (pure aftermarket drift) — <code>data.anchor</code>.</p>
     </div></li>
     <li><div>
       <b>Encode each source in its own arm</b>
@@ -425,12 +436,17 @@
       MLP into one 8-d representation of the deal-in-its-moment.</p>
     </div></li>
     <li><div>
-      <b>Emit a distribution, not a number</b>
-      <p>Four horizons (1d / 3d / 1w / 1m, trading days) × three quantiles, non-crossing by
-      construction (the 10th and 90th are the median minus/plus a softplus offset). The short
-      horizons exist only to regularize training; the 1-month median — averaged across five
-      independently trained seeds — is the forecast, and its q₁₀–q₉₀ band is the uncertainty
-      estimate.</p>
+      <b>Emit a distribution, then correct it</b>
+      <p>Four horizons × three quantiles (20/50/80 at this sample size), non-crossing by
+      construction: the outer quantiles are the median minus/plus a softplus offset. Short
+      horizons regularize training; the 1-month median, seed-ensembled, is the forecast.
+      Two optional corrections finish the job: with
+      <code>label_transform: normal_score</code> the model trains on Gaussian rank scores
+      (a +300% moonshot is just "+2.5σ", so it cannot pull the typical deal) and predictions
+      map back through the training distribution's real tails; then
+      <code>calibrate_intervals.py</code> applies walk-forward conformal margins per tail,
+      because the measured miss is asymmetric — the upper tail is exceeded far more often
+      than nominal.</p>
     </div></li>
   </ol>
 
@@ -438,7 +454,7 @@
     model <code>ipo_model/models/model.py</code> ·
     factors <code>ipo_model/data/features.py</code> ·
     training <code>ipo_model/training/loop.py</code> ·
-    GPR prep <code>scripts/prepare_gpr.py</code><br>
+    calibration <code>scripts/calibrate_intervals.py</code> · GPR prep <code>scripts/prepare_gpr.py</code><br>
     branch <code>claude/ipo-prediction-multi-arm-vcr79w</code> · sizes shown are the defaults in <code>ipo_model/config.py</code>
   </footer>
 </div>
