@@ -4,16 +4,22 @@ Each rung is a named set of config overrides on the same data, folds, seeds
 and metrics, so differences between rungs are attributable to the component
 being toggled:
 
-  0  lgbm / xgb      trees on the engineered features (the bar to clear;
-                     two engines as a robustness check on the baseline)
-  0r lgbm_raw /      trees on engineered features + the raw GPR window:
-     xgb_raw         does unsummarized GPR history help trees?
-  1  static          static arm only
-  2  static+gpr_lvl  + current GPR level
-  3  static+gpr_seq  + GPR temporal encoder (GRU)
-  4  static+panel    + recent-IPO temporal encoder (mean pooling)
-  5  full_v1         static + panel encoder + GPR encoder
-  6  full_v2         + cross-attention pooling + FiLM gating
+  00 naive_const    predict the training median — no ordering at all, so it
+                    floors the distribution metrics
+  00 naive_f1       one-factor regression on recent same-market IPO
+                    performance — the floor that actually matters
+  0  lgbm / xgb     trees on the engineered features (two engines as a
+                    robustness check on the baseline)
+  0  *_tuned        the same trees with hyperparameters random-searched on
+                    the validation slice. THIS is the honest bar: beating a
+                    library-defaults baseline proves nothing
+  0r *_raw          trees on engineered features + the raw GPR window
+  1  static         static arm only
+  2  static+f1      + F1 only
+  3  static+moment. + the full F1-F4 factor block
+  4  +gpr_level     + the GPR level
+  5  full_v1        + the GPR temporal encoder
+  6  full_v2_film   + FiLM gating
 """
 from __future__ import annotations
 
@@ -65,6 +71,9 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
         "0_lgbm_raw": (lgbm, "raw"),
         "0_xgb_raw": (xgb, "raw"),
     }
+    # Tuned variants: a baseline on library defaults is not a fair
+    # comparison. These search hyperparameters on the validation slice.
+    tuned_rungs = {"0_lgbm_tuned": (lgbm, 40), "0_xgb_tuned": (xgb, 40)}
     naive_rungs = {
         "00_naive_const": {"strategy": "constant"},
         "00_naive_f1": {"strategy": "feature", "feature": naive.DEFAULT_FEATURE},
@@ -80,6 +89,9 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
         elif name in tree_rungs:
             engine, features = tree_rungs[name]
             res = engine.run(cfg, fs, features=features, verbose=verbose)
+        elif name in tuned_rungs:
+            engine, n_cfg = tuned_rungs[name]
+            res = engine.run(cfg, fs, tune=n_cfg, verbose=verbose)
         elif name in EXTRA_RUNGS:
             # Optional add-ons: imported here so a missing dependency can
             # never break the default ladder.

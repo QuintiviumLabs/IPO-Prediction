@@ -28,6 +28,41 @@ QuantilePredictor = Callable[
 
 TABLES = {"engineered": engineered_table, "raw": raw_table}
 
+# Random-search space for the tree baselines, sized for ~1k training rows.
+# A baseline left on library defaults is not a baseline — if the deep model
+# only wins against an untuned competitor, it has not been shown to win.
+LGBM_SPACE = {
+    "num_leaves": [3, 7, 15, 31],
+    "min_data_in_leaf": [5, 10, 20, 40],
+    "learning_rate": [0.01, 0.03, 0.05, 0.1],
+    "feature_fraction": [0.5, 0.7, 0.9, 1.0],
+    "bagging_fraction": [0.6, 0.8, 1.0],
+    "lambda_l2": [0.0, 1.0, 5.0, 20.0],
+}
+XGB_SPACE = {
+    "max_leaves": [3, 7, 15, 31],
+    "min_child_weight": [1, 5, 20, 50],
+    "learning_rate": [0.01, 0.03, 0.05, 0.1],
+    "colsample_bytree": [0.5, 0.7, 0.9, 1.0],
+    "subsample": [0.6, 0.8, 1.0],
+    "reg_lambda": [0.0, 1.0, 5.0, 20.0],
+}
+
+
+def sample_configs(space: dict, n: int, seed: int = 0) -> list[dict]:
+    """n distinct random draws from a discrete hyperparameter space."""
+    rng = np.random.default_rng(seed)
+    seen, out = set(), []
+    for _ in range(n * 20):
+        cfg = {k: v[int(rng.integers(len(v)))] for k, v in space.items()}
+        key = tuple(sorted(cfg.items()))
+        if key not in seen:
+            seen.add(key)
+            out.append(cfg)
+        if len(out) == n:
+            break
+    return out
+
 
 def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
               features: str = "engineered", verbose: bool = True) -> RunResult:

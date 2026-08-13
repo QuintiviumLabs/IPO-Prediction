@@ -10,14 +10,16 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from ipo_model.baselines.common import run_folds
+from ipo_model.baselines.common import XGB_SPACE, run_folds, sample_configs
 from ipo_model.config import Config
 from ipo_model.data.features import FeatureSet
 from ipo_model.training.loop import RunResult
 
 
 def run(cfg: Config, fs: FeatureSet, seed: int = 0, features: str = "engineered",
-        verbose: bool = True) -> RunResult:
+        tune: int = 0, verbose: bool = True) -> RunResult:
+    """tune=N runs an N-config random search per fold, selected on the purged
+    validation slice (see lgbm.run for why this matters)."""
     import xgboost as xgb
 
     def predict_quantiles(X_train: pd.DataFrame, y_train: np.ndarray,
@@ -27,18 +29,35 @@ def run(cfg: Config, fs: FeatureSet, seed: int = 0, features: str = "engineered"
         dtrain = xgb.DMatrix(X_train, label=y_train)
         dval = xgb.DMatrix(X_val, label=y_val)
         dtest = xgb.DMatrix(X_test)
+
+        def _fit(params):
+            return xgb.train(params, dtrain,
+                             num_boost_round=cfg.xgb.num_boost_round,
+                             evals=[(dval, "val")],
+                             early_stopping_rounds=cfg.xgb.early_stopping_rounds,
+                             verbose_eval=False)
+
+        base = dict(cfg.xgb.params, seed=seed)
+        if tune:
+            best_err, best = np.inf, base
+            for cand in sample_configs(XGB_SPACE, tune, seed=seed):
+                params = dict(base, **cand)
+                b = _fit(params)
+                pred = b.predict(dval, iteration_range=(0, b.best_iteration + 1))
+                err = float(np.abs(pred - y_val).mean())
+                if err < best_err:
+                    best_err, best = err, params
+            base = best
+            if verbose:
+                shown = {k: base[k] for k in XGB_SPACE if k in base}
+                print(f"    tuned ({tune} configs) val MAE={best_err:.4f}: {shown}")
+
         q_pred = np.empty((len(X_test), len(qs)))
         for qi, q in enumerate(qs):
-            params = dict(cfg.xgb.params, seed=seed)
+            params = dict(base)
             if qi != mid:  # median slot uses the configured point objective
                 params.update({"objective": "reg:quantileerror", "quantile_alpha": q})
-            booster = xgb.train(
-                params, dtrain,
-                num_boost_round=cfg.xgb.num_boost_round,
-                evals=[(dval, "val")],
-                early_stopping_rounds=cfg.xgb.early_stopping_rounds,
-                verbose_eval=False,
-            )
+            booster = _fit(params)
             q_pred[:, qi] = booster.predict(
                 dtest, iteration_range=(0, booster.best_iteration + 1))
         return q_pred

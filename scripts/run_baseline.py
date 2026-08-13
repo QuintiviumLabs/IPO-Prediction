@@ -18,6 +18,9 @@ def main() -> None:
     p.add_argument("--features", choices=["engineered", "raw", "both"],
                    default="engineered",
                    help="engineered summaries, or the full flattened inputs")
+    p.add_argument("--tune", type=int, default=0,
+                   help="random-search this many configs per fold on the "
+                        "validation slice (40 is a good default)")
     p.add_argument("--out", default="results",
                    help="per-deal predictions are saved under <out>/predictions/")
     p.add_argument("--no-save", action="store_true",
@@ -34,12 +37,13 @@ def main() -> None:
     for name in engines:
         for features in feature_sets:
             print(f"\n=== {name} ({features}) ===")
-            res = ENGINES[name](cfg, fs, features=features)
+            res = ENGINES[name](cfg, fs, features=features, tune=args.tune)
             print("\nAcross folds (mean ± std) | pooled OOS:")
             for k, (mu, sd) in res.summary.items():
                 print(f"  {k:>18s}: {mu:+.4f} ± {sd:.4f} | {res.pooled[k]:+.4f}")
             if not args.no_save:
-                rung = f"0_{name}" + ("_raw" if features == "raw" else "")
+                rung = (f"0_{name}" + ("_raw" if features == "raw" else "")
+                        + ("_tuned" if args.tune else ""))
                 print(f"  predictions -> "
                       f"{save_predictions(cfg, fs, res, rung, out_dir=args.out)}")
 
