@@ -52,6 +52,11 @@ class DataConfig:
     # Bookrunner columns rarer than this many deals in the *training* fold are
     # merged into a shared "other" bucket by the fold scaler.
     min_bookrunner_deals: int = 20
+    # Clip standardized continuous features at +/- this many sigma (0 = off).
+    # Mean-type momentum features (e.g. the value-weighted recent-deal
+    # return) carry one moonshot into every prediction of the next 90 days;
+    # clipping caps a single outlier deal's reach through the features.
+    feature_clip: float = 0.0
 
 
 @dataclass
@@ -103,6 +108,13 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
+    # "none" | "normal_score": map labels through the training fold's
+    # empirical CDF onto Gaussian scores before training, and map predicted
+    # quantiles back afterwards. Outlier magnitudes then cannot influence
+    # training beyond their rank — the typical (median) deal is never pulled
+    # toward the moonshot tail — and back-mapped intervals inherit the
+    # empirical tails. Evaluation stays in raw return space either way.
+    label_transform: str = "none"
     lr: float = 1e-3
     weight_decay: float = 1e-4
     batch_size: int = 128

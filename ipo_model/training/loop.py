@@ -133,8 +133,22 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
     for k, fold in enumerate(folds):
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
         tensors = _tensors(fs, scaler, cfg, device)
-        targets = {h: torch.tensor(y, dtype=torch.float32, device=device)
-                   for h, y in fs.y.items()}
+        # Optional rank-based label transform: fit on the TRAINING fold only,
+        # train in Gaussian-score space (outlier magnitudes cannot pull the
+        # body), back-map predictions to return space before evaluation.
+        transform = None
+        if cfg.train.label_transform == "normal_score":
+            from ipo_model.training.transforms import NormalScore
+            transform = {h: NormalScore().fit(y[fold.train_idx])
+                         for h, y in fs.y.items()}
+            targets = {h: torch.tensor(transform[h].transform(y),
+                                       dtype=torch.float32, device=device)
+                       for h, y in fs.y.items()}
+        elif cfg.train.label_transform != "none":
+            raise ValueError(f"Unknown label_transform: {cfg.train.label_transform}")
+        else:
+            targets = {h: torch.tensor(y, dtype=torch.float32, device=device)
+                       for h, y in fs.y.items()}
 
         preds_per_seed, val_losses = [], []
         for seed in cfg.train.seeds:
@@ -144,7 +158,9 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
             preds_per_seed.append(q)
             val_losses.append(val_loss)
 
-        q_ens = np.mean(preds_per_seed, axis=0)
+        q_ens = np.mean(preds_per_seed, axis=0)  # score space if transformed
+        if transform is not None:
+            q_ens = transform[main_h].inverse(q_ens)  # monotone -> no crossing
         y_test = fs.y[main_h][fold.test_idx]
         if cfg.model.l1_input > 0 and cfg.model.use_momentum and verbose:
             norms = model.momentum_input_norms()  # last seed's model

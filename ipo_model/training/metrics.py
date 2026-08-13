@@ -70,8 +70,18 @@ def evaluate(y: np.ndarray, q_pred: np.ndarray,
     out["pearson_ic"] = _pearson(point, y)
     out["decile_spread"] = bucket_spread(point, y, 10)
     out["quintile_spread"] = bucket_spread(point, y, 5)
-    out["top_bucket_mean"] = _bucket_mean(point, y, 5, top=True)
-    out["bottom_bucket_mean"] = _bucket_mean(point, y, 5, top=False)
+    out["top_bucket_mean"] = _bucket_stat(point, y, 5, top=True, stat=np.mean)
+    out["bottom_bucket_mean"] = _bucket_stat(point, y, 5, top=False, stat=np.mean)
+    # Median versions: what the TYPICAL deal in each bucket did. A large
+    # mean/median gap in the top bucket means the spread is moonshot-driven
+    # (real if you get allocations in everything; fragile if you might miss
+    # exactly the handful of extreme winners).
+    out["top_bucket_median"] = _bucket_stat(point, y, 5, top=True, stat=np.median)
+    out["bottom_bucket_median"] = _bucket_stat(point, y, 5, top=False, stat=np.median)
+    out["median_spread"] = (out["top_bucket_median"] - out["bottom_bucket_median"]
+                            if np.isfinite(out["top_bucket_median"])
+                            and np.isfinite(out["bottom_bucket_median"])
+                            else float("nan"))
 
     # ---- directional ----
     nz = y != 0
@@ -175,12 +185,12 @@ def bucket_spread(point: np.ndarray, y: np.ndarray, n_buckets: int = 5) -> float
     return float(y[splits[-1]].mean() - y[splits[0]].mean())
 
 
-def _bucket_mean(point: np.ndarray, y: np.ndarray, n_buckets: int,
-                 top: bool) -> float:
+def _bucket_stat(point: np.ndarray, y: np.ndarray, n_buckets: int,
+                 top: bool, stat=np.mean) -> float:
     if len(y) < 5 * n_buckets or np.std(point) == 0:
         return float("nan")
     splits = np.array_split(np.argsort(point), n_buckets)
-    return float(y[splits[-1 if top else 0]].mean())
+    return float(stat(y[splits[-1 if top else 0]]))
 
 
 # Backwards-compatible alias for the pre-expansion private helper.
