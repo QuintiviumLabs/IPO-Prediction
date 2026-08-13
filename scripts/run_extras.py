@@ -16,6 +16,7 @@ import pandas as pd
 
 from ipo_model.config import Config
 from ipo_model.data.features import build_features, load_raw
+from ipo_model.results_io import save_predictions
 
 
 def _report(name: str, res) -> dict:
@@ -58,6 +59,7 @@ def main() -> None:
         res = linear.run(cfg, fs, model=args.model,
                          quantile_method=args.quantile_method)
         rows.append(_report(name, res))
+        print(f"  predictions -> {save_predictions(cfg, fs, res, name, args.out)}")
 
         coefs = linear.coefficients(cfg, fs, model=args.model)
         out = Path(args.out)
@@ -72,6 +74,7 @@ def main() -> None:
         res = tabpfn_model.run(cfg, fs, device=args.device,
                                n_estimators=args.n_estimators)
         rows.append(_report("x_tabpfn", res))
+        print(f"  predictions -> {save_predictions(cfg, fs, res, 'x_tabpfn', args.out)}")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

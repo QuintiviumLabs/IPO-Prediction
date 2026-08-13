@@ -5,6 +5,7 @@ import argparse
 from ipo_model.baselines import lgbm, xgb
 from ipo_model.config import Config
 from ipo_model.data.features import build_features, load_raw
+from ipo_model.results_io import save_predictions
 
 ENGINES = {"lgbm": lgbm.run, "xgb": xgb.run}
 
@@ -17,6 +18,10 @@ def main() -> None:
     p.add_argument("--features", choices=["engineered", "raw", "both"],
                    default="engineered",
                    help="engineered summaries, or the full flattened inputs")
+    p.add_argument("--out", default="results",
+                   help="per-deal predictions are saved under <out>/predictions/")
+    p.add_argument("--no-save", action="store_true",
+                   help="skip saving predictions (they cannot be recovered later)")
     args = p.parse_args()
 
     cfg = Config.from_yaml(args.config) if args.config else Config()
@@ -33,6 +38,10 @@ def main() -> None:
             print("\nAcross folds (mean ± std) | pooled OOS:")
             for k, (mu, sd) in res.summary.items():
                 print(f"  {k:>18s}: {mu:+.4f} ± {sd:.4f} | {res.pooled[k]:+.4f}")
+            if not args.no_save:
+                rung = f"0_{name}" + ("_raw" if features == "raw" else "")
+                print(f"  predictions -> "
+                      f"{save_predictions(cfg, fs, res, rung, out_dir=args.out)}")
 
 
 if __name__ == "__main__":

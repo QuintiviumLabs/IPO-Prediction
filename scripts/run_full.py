@@ -7,6 +7,7 @@ import argparse
 
 from ipo_model.config import Config
 from ipo_model.data.features import build_features, load_raw
+from ipo_model.results_io import save_predictions
 from ipo_model.training import loop
 
 
@@ -16,6 +17,12 @@ def main() -> None:
     p.add_argument("--config", default=None, help="optional YAML config")
     p.add_argument("--seeds", type=int, nargs="+", default=None)
     p.add_argument("--film", action="store_true", help="FiLM gating by the GPR arm")
+    p.add_argument("--out", default="results",
+                   help="per-deal predictions are saved under <out>/predictions/")
+    p.add_argument("--name", default=None,
+                   help="label for the saved predictions (default: full_v1 / full_v2_film)")
+    p.add_argument("--no-save", action="store_true",
+                   help="skip saving predictions (they cannot be recovered later)")
     args = p.parse_args()
 
     cfg = Config.from_yaml(args.config) if args.config else Config()
@@ -34,6 +41,13 @@ def main() -> None:
     print("\nAcross folds (mean ± std) | pooled OOS:")
     for k, (mu, sd) in res.summary.items():
         print(f"  {k:>18s}: {mu:+.4f} ± {sd:.4f} | {res.pooled[k]:+.4f}")
+
+    if not args.no_save:
+        name = args.name or ("full_v2_film" if args.film else "full_v1")
+        path = save_predictions(cfg, fs, res, name, out_dir=args.out)
+        print(f"\nPer-deal predictions -> {path}\n"
+              f"Analyse (no retraining needed):\n"
+              f"  python scripts/analyze_results.py --results {args.out}")
 
 
 if __name__ == "__main__":

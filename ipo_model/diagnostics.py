@@ -133,12 +133,40 @@ def tree_gain_importance(cfg: Config, fs: FeatureSet, seed: int = 0) -> pd.DataF
     }).sort_values("gain_share", ascending=False).reset_index(drop=True)
 
 
+def slice_metrics_from_predictions(cfg: Config, fs: FeatureSet,
+                                   preds: pd.DataFrame) -> pd.DataFrame:
+    """Slice metrics from a saved predictions CSV — no retraining.
+
+    Rows are matched back to the feature set by ipo_id, so this works on any
+    run whose predictions were persisted, including ones produced by a
+    different model or an earlier session.
+    """
+    from ipo_model.results_io import quantile_columns
+
+    pos = {i: k for k, i in enumerate(fs.ids)}
+    keep = preds["ipo_id"].isin(pos).to_numpy()
+    if not keep.all():
+        preds = preds[keep]
+    if preds.empty:
+        raise ValueError("no saved predictions match the current feature set — "
+                         "are these predictions from a different dataset?")
+    idx = np.array([pos[i] for i in preds["ipo_id"]])
+    q, levels = quantile_columns(preds)
+    y = preds["y_true"].to_numpy(float)
+    return _slices(cfg, fs, idx, q, y, levels)
+
+
 def slice_metrics(cfg: Config, fs: FeatureSet, res: RunResult) -> pd.DataFrame:
     """Pooled OOS rank IC / MAE by slice, from an existing RunResult."""
     main_h = cfg.main_horizon
     idx = np.concatenate([r.test_idx for r in res.fold_results])
     q = np.concatenate([r.q_pred for r in res.fold_results])
     y = fs.y[main_h][idx]
+    return _slices(cfg, fs, idx, q, y, cfg.model.quantiles)
+
+
+def _slices(cfg: Config, fs: FeatureSet, idx: np.ndarray, q: np.ndarray,
+            y: np.ndarray, quantiles) -> pd.DataFrame:
 
     slices: dict[str, np.ndarray] = {}
     for j, m in enumerate(fs.market_names):
@@ -165,7 +193,8 @@ def slice_metrics(cfg: Config, fs: FeatureSet, res: RunResult) -> pd.DataFrame:
     for name, mask in slices.items():
         if mask.sum() < 20:
             continue
-        m = evaluate(y[mask], q[mask], cfg.model.quantiles)
+        m = evaluate(y[mask], q[mask], quantiles)
         rows.append({"slice": name, "n": int(mask.sum()), "rank_ic": m["rank_ic"],
-                     "mae": m["mae"], "coverage": m["coverage"]})
+                     "quintile_spread": m["quintile_spread"], "mae": m["mae"],
+                     "coverage": m["coverage"], "coverage_error": m["coverage_error"]})
     return pd.DataFrame(rows)

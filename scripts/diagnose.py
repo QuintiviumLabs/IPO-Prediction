@@ -25,6 +25,11 @@ def main() -> None:
                    choices=["tree", "perm", "slice"])
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--out", default="results/diagnostics")
+    p.add_argument("--from-predictions", default=None, metavar="RUNG",
+                   help="compute slice metrics from a saved predictions CSV "
+                        "(results/predictions/<RUNG>.csv) instead of retraining")
+    p.add_argument("--results", default="results",
+                   help="where saved predictions live, for --from-predictions")
     args = p.parse_args()
 
     cfg = Config.from_yaml(args.config) if args.config else Config()
@@ -46,10 +51,17 @@ def main() -> None:
         print(df.round(4).to_string(index=False))
 
     if "slice" in args.what:
-        print("\n=== OOS metrics by slice (deep model, 1 seed) ===")
-        fast = cfg.override(**{"train.seeds": (cfg.train.seeds[0],)})
-        res = loop.run(fast, fs, verbose=False)
-        df = diagnostics.slice_metrics(cfg, fs, res)
+        if args.from_predictions:
+            from ipo_model.results_io import load_predictions
+            print(f"\n=== OOS metrics by slice ({args.from_predictions}, "
+                  "from saved predictions) ===")
+            preds = load_predictions(args.from_predictions, args.results)
+            df = diagnostics.slice_metrics_from_predictions(cfg, fs, preds)
+        else:
+            print("\n=== OOS metrics by slice (deep model, 1 seed) ===")
+            fast = cfg.override(**{"train.seeds": (cfg.train.seeds[0],)})
+            res = loop.run(fast, fs, verbose=False)
+            df = diagnostics.slice_metrics(cfg, fs, res)
         df.to_csv(out / "slice_metrics.csv", index=False)
         print(df.round(4).to_string(index=False))
 

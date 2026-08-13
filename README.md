@@ -185,6 +185,8 @@ ipo_model/
   models/model.py        three arms, FiLM, quantile heads
   training/{losses,metrics,loop}.py
   results_io.py          per-deal prediction persistence (post-hoc analysis)
+                         — every run script saves to results/predictions/;
+                         analysis then needs no retraining
   baselines/{lgbm,xgb}.py  ablation 0 (two tree engines, shared fold loop)
   extras/                optional rungs: regularized linear, TabPFN
   diagnostics.py         feature importance + failure slices
