@@ -20,6 +20,15 @@ class DataConfig:
     # benchmark grew to". 1d / 3d / 1w / 1m. market_adjust=False -> raw.
     horizons: tuple[int, ...] = (1, 3, 5, 21)   # trading days; last is the main target
     market_adjust: bool = True
+    # Where the target's return starts.
+    #   "offer"       log(close_h / offer_price) — includes the first-day pop,
+    #                 which typically dominates the variance at every horizon.
+    #   "first_close" log(close_h / close_1) — strips the pop and isolates
+    #                 aftermarket drift. Horizon 1 is degenerate under this
+    #                 anchor, so use horizons like (3, 5, 21).
+    # F1/F2 momentum factors stay offer-anchored either way, per the factor
+    # spec — this switch changes the TARGET only.
+    anchor: str = "offer"
     # Market-agnostic training: exclude the market one-hot from features so
     # the model predicts general outperformance instead of market identity.
     include_market_onehot: bool = False
