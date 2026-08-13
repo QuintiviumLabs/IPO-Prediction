@@ -40,6 +40,16 @@ RUNGS: dict[str, dict[str, Any]] = {
                        "model.gpr_mode": "lstm", "model.gating": "film"},
 }
 
+# Optional add-on rungs (ipo_model/extras). NOT in the default ladder — they
+# need extra dependencies (requirements-extras.txt). Request explicitly:
+#     python scripts/run_ablations.py --rungs 0_lgbm x_ridge x_tabpfn 5_full_v1
+EXTRA_RUNGS: dict[str, tuple[str, dict[str, Any]]] = {
+    "x_ridge": ("linear", {"model": "ridge"}),
+    "x_lasso": ("linear", {"model": "lasso"}),
+    "x_elasticnet": ("linear", {"model": "elasticnet"}),
+    "x_tabpfn": ("tabpfn", {}),
+}
+
 REPORT_METRICS = ["rank_ic", "hit_rate", "decile_spread", "mae", "pinball", "coverage"]
 
 
@@ -59,6 +69,15 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
         if name in tree_rungs:
             engine, features = tree_rungs[name]
             res = engine.run(cfg, fs, features=features, verbose=verbose)
+        elif name in EXTRA_RUNGS:
+            # Optional add-ons: imported here so a missing dependency can
+            # never break the default ladder.
+            kind, kwargs = EXTRA_RUNGS[name]
+            if kind == "linear":
+                from ipo_model.extras import linear as _mod
+            else:
+                from ipo_model.extras import tabpfn_model as _mod
+            res = _mod.run(cfg, fs, verbose=verbose, **kwargs)
         else:
             res = loop.run(cfg.override(**RUNGS[name]), fs, verbose=verbose)
         row: dict[str, Any] = {"rung": name}

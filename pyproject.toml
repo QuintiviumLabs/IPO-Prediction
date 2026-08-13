@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+extras = ["scikit-learn", "tabpfn==2.2.1"]
 
 [build-system]
 requires = ["setuptools>=64"]

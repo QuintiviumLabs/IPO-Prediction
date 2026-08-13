@@ -109,6 +109,20 @@ pytest
 | 5_full_v1 | + the GPR temporal encoder (does GPR *dynamics* beat its level?) |
 | 6_full_v2_film | + FiLM gating (does the risk regime modulate the other arms?) |
 
+Optional add-on rungs live in [`ipo_model/extras/`](ipo_model/extras/README.md)
+and are **excluded from the default ladder** so a missing dependency can never
+break it (`pip install -r requirements-extras.txt`, then request them by name):
+
+| rung | what it tests |
+|---|---|
+| `x_ridge` / `x_lasso` / `x_elasticnet` | regularized linear — arguably the right complexity at ~1k rows; if it ties the net, that is a finding |
+| `x_tabpfn` | TabPFN in-context learning, purpose-built for small tabular data; emits its own predictive distribution |
+
+```bash
+python scripts/run_extras.py --data data --config configs/small.yaml --what linear tabpfn
+python scripts/run_ablations.py --data data --rungs 0_lgbm x_ridge x_tabpfn 5_full_v1
+```
+
 ## Plugging in real data
 
 Drop CSVs in a directory (see `ipo_model/data/features.py` for details):
@@ -145,6 +159,8 @@ ipo_model/
   models/model.py        three arms, FiLM, quantile heads
   training/{losses,metrics,loop}.py
   baselines/{lgbm,xgb}.py  ablation 0 (two tree engines, shared fold loop)
+  extras/                optional rungs: regularized linear, TabPFN
+  diagnostics.py         feature importance + failure slices
   ablation.py            the ladder
 scripts/                 CLI entry points (incl. prepare_gpr.py)
 docs/architecture.html   the architecture diagram (also published as an artifact)

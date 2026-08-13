@@ -1,0 +1,11 @@
+# Optional dependencies for ipo_model/extras — the core pipeline does not
+# need these. Install with:  pip install -r requirements-extras.txt
+
+# Regularized linear rung (Ridge / Lasso / ElasticNet, QuantileRegressor)
+scikit-learn
+
+# TabPFN rung. 2.2.1 is pinned deliberately: its weights are a plain
+# unauthenticated download. Version 8.x works too but its weights are GATED
+# on HuggingFace (accept terms + `hf auth login` or HF_TOKEN), which is
+# often blocked on managed laptops.
+tabpfn==2.2.1

@@ -5,7 +5,7 @@ Writes results/ablations.csv and results/ablations.md.
 """
 import argparse
 
-from ipo_model.ablation import RUNGS, run_ladder
+from ipo_model.ablation import EXTRA_RUNGS, RUNGS, run_ladder
 from ipo_model.config import Config
 from ipo_model.data.features import build_features, load_raw
 
@@ -16,7 +16,9 @@ def main() -> None:
     p.add_argument("--config", default=None, help="optional YAML config")
     p.add_argument("--seeds", type=int, nargs="+", default=None)
     p.add_argument("--rungs", nargs="+", default=None,
-                   help=f"subset of: 0_lgbm 0_xgb {' '.join(RUNGS)}")
+                   help=f"subset of: 0_lgbm 0_xgb 0_lgbm_raw 0_xgb_raw "
+                        f"{' '.join(RUNGS)} | opt-in extras (need "
+                        f"requirements-extras.txt): {' '.join(EXTRA_RUNGS)}")
     p.add_argument("--out", default="results")
     args = p.parse_args()
 
