@@ -1,10 +1,12 @@
 # IPO aftermarket return prediction
 
-> Setting this up on a Windows laptop with Bloomberg? Start with
-> **[WINDOWS_QUICKSTART.md](WINDOWS_QUICKSTART.md)** — environment creation,
-> data assembly from Bloomberg, and migration in one page.
-> **[docs/BLOOMBERG_DATA.md](docs/BLOOMBERG_DATA.md)** covers where each
-> field comes from on the terminal.
+> **Setting this up on a Windows laptop with Bloomberg?** Open
+> **[docs/runbook.html](docs/runbook.html)** — the full run-book: environment
+> install, connecting your dataset, validation, the runs, reading the
+> results, and troubleshooting. Text versions:
+> [WINDOWS_QUICKSTART.md](WINDOWS_QUICKSTART.md) (setup) and
+> [docs/BLOOMBERG_DATA.md](docs/BLOOMBERG_DATA.md) (where each field comes
+> from on the terminal).
 
 A framework for predicting IPO aftermarket returns from three information
 sources, with gradient-boosted baselines the deep model has to beat:

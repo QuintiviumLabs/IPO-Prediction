@@ -1,0 +1,468 @@
+<title>IPO Model Runbook</title>
+<style>
+  :root {
+    --bg: #F5F7F4;
+    --surface: #FFFFFF;
+    --sunken: #EDF1EE;
+    --ink: #1F2B31;
+    --muted: #5D6D72;
+    --line: #C8D1CE;
+    --accent: #10756A;
+    --accent-soft: #DBEDE8;
+    --warn: #96660D;
+    --warn-soft: #F7EEDC;
+    --danger: #A83A28;
+    --code-bg: #1D2A2E;
+    --code-ink: #E4EDEA;
+    --display: "Avenir Next", Avenir, Futura, "Century Gothic", "Segoe UI", system-ui, sans-serif;
+    --body: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+    --mono: "SF Mono", "Cascadia Code", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131A1D;
+      --surface: #1B2327;
+      --sunken: #171F22;
+      --ink: #E5EAE7;
+      --muted: #92A19D;
+      --line: #3A474B;
+      --accent: #46B4A3;
+      --accent-soft: #17302C;
+      --warn: #D5A554;
+      --warn-soft: #2A2418;
+      --danger: #DF7258;
+      --code-bg: #0F1618;
+      --code-ink: #D8E3E0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131A1D;
+    --surface: #1B2327;
+    --sunken: #171F22;
+    --ink: #E5EAE7;
+    --muted: #92A19D;
+    --line: #3A474B;
+    --accent: #46B4A3;
+    --accent-soft: #17302C;
+    --warn: #D5A554;
+    --warn-soft: #2A2418;
+    --danger: #DF7258;
+    --code-bg: #0F1618;
+    --code-ink: #D8E3E0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--body); margin: 0; line-height: 1.6;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 44px 22px 80px; }
+
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 30px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 600;
+    font-size: clamp(28px, 5vw, 40px); letter-spacing: -0.01em;
+    line-height: 1.08; margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; color: var(--muted); max-width: 64ch; margin: 0; }
+
+  h2 {
+    font-family: var(--display); font-weight: 600; font-size: 21px;
+    margin: 46px 0 4px; display: flex; align-items: baseline; gap: 12px;
+    scroll-margin-top: 20px;
+  }
+  h2 .num {
+    font-family: var(--mono); font-size: 13px; color: var(--accent);
+    border: 1.5px solid var(--accent); border-radius: 4px;
+    padding: 2px 7px; font-weight: 600; flex: none;
+  }
+  h3 {
+    font-family: var(--display); font-weight: 600; font-size: 16px;
+    margin: 28px 0 8px;
+  }
+  .lede { color: var(--muted); font-size: 15.5px; margin: 0 0 18px; max-width: 74ch; }
+  p { max-width: 74ch; }
+  a { color: var(--accent); }
+
+  pre {
+    background: var(--code-bg); color: var(--code-ink);
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.75;
+    padding: 15px 17px; border-radius: 8px; overflow-x: auto;
+    margin: 12px 0; border: 1px solid var(--line);
+  }
+  pre .cmt { color: #7E9E96; }
+  code {
+    font-family: var(--mono); font-size: 0.87em;
+    background: var(--sunken); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+  .tablewrap { overflow-x: auto; margin: 14px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 460px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--display); font-weight: 600; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    border-bottom: 1.5px solid var(--line);
+  }
+  td code { font-size: 12.8px; }
+  .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 13px 16px; border-radius: 0 7px 7px 0; margin: 18px 0;
+    font-size: 15px;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout b { font-family: var(--display); }
+  .callout p { margin: 0; max-width: none; }
+  .callout p + p { margin-top: 8px; }
+
+  figure { margin: 26px 0; }
+  .figcard {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; padding: 16px 12px 10px; overflow-x: auto;
+  }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 560px; margin: 0 auto; }
+  figcaption { font-size: 14px; color: var(--muted); margin: 10px 6px 0; max-width: 76ch; }
+  svg text { font-family: var(--display); fill: var(--ink); }
+  svg .t-lbl { font-size: 12px; font-weight: 600; }
+  svg .t-mono { font-family: var(--mono); font-size: 11.5px; }
+  svg .t-sub { font-size: 11px; fill: var(--muted); }
+
+  footer {
+    margin-top: 54px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12.5px; color: var(--muted); line-height: 1.9;
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Setup &amp; operation · Windows + Bloomberg</p>
+    <h1>IPO Model Runbook</h1>
+    <p class="standfirst">
+      Everything needed to go from a bare work laptop to a trained model on your own
+      IPO dataset: environment, data assembly, validation, the runs, and how to read
+      what comes out.
+    </p>
+  </header>
+
+  <p class="lede">
+    The pipeline is plain Python with no database and no services. You assemble
+    <strong>four CSV files in one folder</strong>; every script reads that folder. That is
+    also why moving machines is easy — the repo plus that folder <em>is</em> the project.
+  </p>
+
+  <figure>
+    <div class="figcard">
+    <svg viewBox="0 0 900 300" role="img"
+         aria-label="Three data sources feed four CSV files in a single data folder, which the pipeline scripts read to produce results: your company CSV becomes ipos.csv, Bloomberg produces prices.csv and market.csv, and a web download produces gpr.csv.">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+
+      <text x="20" y="20" class="t-sub">WHERE IT COMES FROM</text>
+      <text x="330" y="20" class="t-sub">data\ FOLDER</text>
+      <text x="650" y="20" class="t-sub">WHAT YOU RUN</text>
+
+      <!-- sources -->
+      <rect x="20" y="34" width="190" height="46" rx="7" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="36" y="54" class="t-lbl">Your company CSV</text>
+      <text x="36" y="70" class="t-sub">deal list, sectors, banks</text>
+
+      <rect x="20" y="96" width="190" height="62" rx="7" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="36" y="116" class="t-lbl" fill="var(--accent)">Bloomberg Terminal</text>
+      <text x="36" y="132" class="t-sub">IPO &lt;GO&gt; · BDH prices</text>
+      <text x="36" y="148" class="t-sub">one index per market</text>
+
+      <rect x="20" y="174" width="190" height="46" rx="7" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="36" y="194" class="t-lbl">Web download</text>
+      <text x="36" y="210" class="t-sub">fetch_gpr.py</text>
+
+      <!-- files -->
+      <rect x="300" y="30" width="210" height="34" rx="17" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+      <text x="405" y="52" text-anchor="middle" class="t-mono">ipos.csv</text>
+      <rect x="300" y="76" width="210" height="34" rx="17" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+      <text x="405" y="98" text-anchor="middle" class="t-mono">prices.csv</text>
+      <rect x="300" y="122" width="210" height="34" rx="17" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+      <text x="405" y="144" text-anchor="middle" class="t-mono">market.csv</text>
+      <rect x="300" y="168" width="210" height="34" rx="17" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+      <text x="405" y="190" text-anchor="middle" class="t-mono">gpr.csv</text>
+      <rect x="300" y="214" width="210" height="34" rx="17" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3" stroke-dasharray="5 4"/>
+      <text x="405" y="236" text-anchor="middle" class="t-mono" fill="var(--muted)">deals.csv (optional)</text>
+
+      <!-- source -> file arrows -->
+      <path d="M 210 57 L 296 47" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#a)"/>
+      <path d="M 210 120 L 296 93" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#a)"/>
+      <path d="M 210 130 L 296 139" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#a)"/>
+      <path d="M 210 150 L 296 228" fill="none" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="5 4" marker-end="url(#a)"/>
+      <path d="M 210 197 L 296 185" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#a)"/>
+
+      <!-- pipeline -->
+      <path d="M 514 139 L 606 139" fill="none" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#a)"/>
+
+      <rect x="610" y="34" width="270" height="40" rx="7" fill="var(--surface)" stroke="var(--warn)" stroke-width="1.5"/>
+      <text x="626" y="59" class="t-mono" fill="var(--warn)">check_data.py</text>
+      <text x="872" y="59" text-anchor="end" class="t-sub">validate first</text>
+
+      <rect x="610" y="84" width="270" height="40" rx="7" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="626" y="109" class="t-mono">run_baseline.py</text>
+      <text x="872" y="109" text-anchor="end" class="t-sub">the bar to clear</text>
+
+      <rect x="610" y="134" width="270" height="40" rx="7" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.8"/>
+      <text x="626" y="159" class="t-mono">run_ablations.py</text>
+      <text x="872" y="159" text-anchor="end" class="t-sub">the main run</text>
+
+      <rect x="610" y="184" width="270" height="40" rx="7" fill="var(--surface)" stroke="var(--line)" stroke-width="1.3"/>
+      <text x="626" y="209" class="t-mono">diagnose.py</text>
+      <text x="872" y="209" text-anchor="end" class="t-sub">why it did that</text>
+
+      <path d="M 745 224 L 745 250" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#a)"/>
+      <rect x="610" y="254" width="270" height="34" rx="7" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+      <text x="745" y="276" text-anchor="middle" class="t-mono" fill="var(--accent)">results\</text>
+    </svg>
+    </div>
+    <figcaption>
+      Three sources, one folder, four scripts. Nothing else on the laptop holds project
+      state — which is what makes migration a copy of two things.
+    </figcaption>
+  </figure>
+
+  <h2><span class="num">01</span> Install the environment</h2>
+  <p class="lede">One time per machine, about 15 minutes including downloads.</p>
+
+  <p>Install <a href="https://www.python.org/downloads/">Python 3.11</a> — tick
+  <strong>“Add python.exe to PATH”</strong> in the installer — and
+  <a href="https://git-scm.com/download/win">Git for Windows</a>. Then open
+  <strong>PowerShell</strong> and run, from wherever you keep projects:</p>
+
+  <pre><code>git clone https://github.com/QuintiviumLabs/Test.git ipo-model
+cd ipo-model
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -e .</code></pre>
+
+  <div class="callout warn">
+    <p><b>If activation is blocked</b> — corporate laptops often disable scripts. Run
+    this once, then retry the activate line:</p>
+    <p><code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code></p>
+  </div>
+
+  <h3>Prove it works before touching real data</h3>
+  <p>This generates a fake dataset and runs the baseline on it. If you see per-fold
+  metrics, the whole stack is functional.</p>
+  <pre><code>python scripts\make_synthetic_data.py --out demo_data --n-ipos 400
+python scripts\check_data.py --data demo_data
+python scripts\run_baseline.py --data demo_data</code></pre>
+
+  <p>Every later session starts with just: <code>cd ipo-model</code> then
+  <code>.venv\Scripts\activate</code> (your prompt gains a <code>(.venv)</code> prefix).</p>
+
+  <h2><span class="num">02</span> Connect your dataset</h2>
+  <p class="lede">Create a folder named <code>data</code> in the repo and build these
+  files in it. Column names must match exactly; dates are YYYY-MM-DD.</p>
+
+  <h3>ipos.csv — your company CSV, renamed</h3>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Column</th><th>What goes in it</th></tr></thead>
+    <tbody>
+      <tr><td><code>ipo_id</code></td><td>Any unique string per deal — ticker is fine</td></tr>
+      <tr><td><code>first_trade_date</code></td><td>First day of trading</td></tr>
+      <tr><td><code>offer_price</code></td><td>IPO offer price</td></tr>
+      <tr><td><code>market</code></td><td>Market label, e.g. <code>HK</code>, <code>US</code>. Must match market.csv</td></tr>
+      <tr><td><code>deal_size</code></td><td>Proceeds raised — any consistent unit</td></tr>
+      <tr><td><code>is_tmt</code>, <code>is_healthcare</code></td><td>0 or 1</td></tr>
+      <tr><td><code>bk_*</code></td><td>One 0/1 column per bookrunner — <code>bk_goldman</code>, <code>bk_ms</code>, … Multiple 1s per deal is expected</td></tr>
+      <tr><td><code>is_target</code> <em>(optional)</em></td><td>1 = model this deal, 0 = momentum-universe only</td></tr>
+      <tr><td><code>bbg_ticker</code> <em>(optional)</em></td><td>Bloomberg ticker if it differs from <code>ipo_id</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout">
+    <p><b>About <code>is_target</code>.</b> The F1/F2 momentum factors read “the 10 most
+    recent IPOs in this market” out of this same file. If your 1,570 deals are a filtered
+    subset of each market, those factors misread the market.</p>
+    <p>Fix: add the market’s <em>other</em> IPOs with <code>is_target=0</code>. They feed
+    the factors but are never trained or tested on, need only ~6 trading days of prices,
+    and can leave <code>deal_size</code>, sector and bookrunner columns blank.</p>
+  </div>
+
+  <h3>prices.csv, market.csv — Bloomberg</h3>
+  <p><code>prices.csv</code> is long format <code>ipo_id,date,close</code>, roughly the
+  first 30 trading days per deal. <code>market.csv</code> is
+  <code>date,market,close</code> — <strong>one benchmark index per market</strong>, since
+  the model predicts outperformance against each deal’s own benchmark.</p>
+
+  <p>With the Terminal running and logged in, script both at once:</p>
+  <pre><code>pip install --index-url https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
+pip install xbbg
+
+<span class="cmt"># smoke test on 5 deals first — inspect the output</span>
+python scripts\pull_bloomberg.py --data data --benchmarks "HK=HSI Index,US=SPX Index" --limit 5
+
+<span class="cmt"># then the full pull (resumable; bad tickers are logged, not fatal)</span>
+python scripts\pull_bloomberg.py --data data --benchmarks "HK=HSI Index,US=SPX Index"</code></pre>
+
+  <p>Or by hand in Excel, one deal per block, stacked into a long sheet:</p>
+  <pre><code>=BDH("0700 HK Equity","PX_LAST",first_trade_date,first_trade_date+45,"Days=T","Fill=P")
+=BDH("HSI Index","PX_LAST",start,end)</code></pre>
+
+  <div class="callout warn">
+    <p><b>Survivorship.</b> Build the IPO list from a <em>historical</em> screen
+    (<code>IPO &lt;GO&gt;</code>), which includes companies that later delisted. A list
+    from current index membership drops exactly the failures — inflating every momentum
+    factor precisely when the market was worst. Capture the FIGI/BBGID at export; plain
+    tickers of delisted names often no longer resolve.</p>
+  </div>
+
+  <h3>gpr.csv — geopolitical risk, from the web</h3>
+  <pre><code>python scripts\fetch_gpr.py --out data\gpr.csv</code></pre>
+  <p>If your firewall blocks it, download the <strong>daily</strong> file from
+  <a href="https://www.matteoiacoviello.com/gpr.htm">matteoiacoviello.com/gpr.htm</a> in a
+  browser, then convert:</p>
+  <pre><code>python scripts\prepare_gpr.py --in Downloads\data_gpr_daily_recent.xls --out data\gpr.csv</code></pre>
+
+  <h3>deals.csv — optional, this is where your follow-on data goes</h3>
+  <p><code>date,market,sector,proceeds</code> covering IPOs <em>and</em> follow-ons and
+  convertibles, sector one of <code>tmt</code> / <code>healthcare</code> /
+  <code>other</code>. It upgrades the F3/F4 supply factors to the all-deal-types version.
+  Without it they fall back to IPOs only.</p>
+
+  <h2><span class="num">03</span> Validate before running anything</h2>
+  <p class="lede">This is a check-fix loop, not a one-shot. Every problem prints as a
+  specific instruction rather than a stack trace mid-run.</p>
+  <pre><code>python scripts\check_data.py --data data</code></pre>
+  <p>It flags missing columns, unparseable dates, duplicate IDs, benchmark series that
+  start too late for a market’s first IPO, deals with too few closes, and the
+  target/universe split. Fix everything marked <code>ERROR</code>; read the
+  <code>warning</code> lines and decide.</p>
+
+  <h2><span class="num">04</span> Run the models</h2>
+  <p class="lede">Always pass <code>--config configs\small.yaml</code> — it carries the
+  settings tuned for a ~1,500-row sample (smaller quantile band, 4 folds, 7 seeds).</p>
+
+  <pre><code><span class="cmt"># 1. the bar to clear — gradient-boosted trees, both engines, under a minute</span>
+python scripts\run_baseline.py --data data --config configs\small.yaml --engine both
+
+<span class="cmt"># 2. the neural model on its own, single seed — fast iteration</span>
+python scripts\run_full.py --data data --config configs\small.yaml --seeds 0
+
+<span class="cmt"># 3. the main run: every rung, full seed ensemble -> results\ablations.md</span>
+python scripts\run_ablations.py --data data --config configs\small.yaml
+
+<span class="cmt"># 4. why it behaved that way</span>
+python scripts\diagnose.py --data data --config configs\small.yaml</code></pre>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Command</th><th class="num-col">Rough time</th><th>Produces</th></tr></thead>
+    <tbody>
+      <tr><td><code>run_baseline.py</code></td><td class="num-col">&lt; 1 min</td><td>Printed metrics per fold</td></tr>
+      <tr><td><code>run_full.py --seeds 0</code></td><td class="num-col">~1 min</td><td>Printed metrics per fold</td></tr>
+      <tr><td><code>run_ablations.py</code></td><td class="num-col">20–40 min</td><td><code>results\ablations.md</code> and <code>.csv</code></td></tr>
+      <tr><td><code>diagnose.py</code></td><td class="num-col">5–15 min</td><td><code>results\diagnostics\*.csv</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:14.5px;color:var(--muted)">Laptop CPU, ~1,500 deals. No GPU needed —
+  the model is about 1,700 parameters.</p>
+
+  <h2><span class="num">05</span> Read the results</h2>
+  <p class="lede">Open <code>results\ablations.md</code>. Each row is a model variant, each
+  number is mean ± standard deviation across the time-ordered folds.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Metric</th><th>What it means</th><th>What is good</th></tr></thead>
+    <tbody>
+      <tr><td><code>rank_ic</code></td><td>Correlation between predicted and realised ranking of deals — the headline number</td><td class="num-col">0.05–0.15 is a real result on live data</td></tr>
+      <tr><td><code>decile_spread</code></td><td>Top-decile minus bottom-decile realised outperformance</td><td class="num-col">Positive and stable across folds</td></tr>
+      <tr><td><code>coverage</code></td><td>How often the truth landed inside the predicted band</td><td class="num-col">Close to <code>nominal_coverage</code></td></tr>
+      <tr><td><code>mae</code></td><td>Average size of the miss</td><td class="num-col">Lower, but noisy on fat tails</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout">
+    <p><b>The one comparison that matters.</b> The deep rungs must beat rung
+    <code>0_lgbm</code>. If they do not, the honest finding is that engineered features and
+    gradient boosting are sufficient — which is a perfectly publishable result, and the
+    ablation ladder is what lets you say it with evidence.</p>
+    <p>Read the <em>standard deviation</em> too. A mean rank IC of 0.12 ± 0.02 is a signal;
+    0.12 ± 0.20 is one lucky fold.</p>
+  </div>
+
+  <p>Then <code>results\diagnostics\</code>: <code>permutation_importance.csv</code> ranks
+  features by how much rank IC drops when each is shuffled — a <em>negative</em> value
+  means the feature is actively hurting. <code>slice_metrics.csv</code> breaks performance
+  down by market, sector and risk regime, turning “it underperforms” into “it underperforms
+  in low-issuance windows”.</p>
+
+  <h2><span class="num">06</span> When something breaks</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>python</code> is not recognised</td>
+        <td>PATH was not set at install. Use <code>py -3.11</code> instead, or reinstall Python with the PATH box ticked</td>
+      </tr>
+      <tr>
+        <td>Cannot run activate — scripts disabled</td>
+        <td><code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>, then retry</td>
+      </tr>
+      <tr>
+        <td><code>ModuleNotFoundError: ipo_model</code></td>
+        <td>The venv is not active, or <code>pip install -e .</code> was skipped</td>
+      </tr>
+      <tr>
+        <td><code>ImportError: blpapi</code></td>
+        <td>Install it from Bloomberg’s own index — the plain PyPI name will not work</td>
+      </tr>
+      <tr>
+        <td>Bloomberg returns nothing for a ticker</td>
+        <td>Usually a delisted name. Use the FIGI/BBGID. Check <code>bloomberg_failures.csv</code> for the full list</td>
+      </tr>
+      <tr>
+        <td><code>fetch_gpr.py</code> fails</td>
+        <td>Firewall or a moved link. Download in a browser and use <code>prepare_gpr.py</code></td>
+      </tr>
+      <tr>
+        <td>check_data: benchmark starts on/after first IPO</td>
+        <td>Re-pull that index with an earlier start date — it needs history before the first deal</td>
+      </tr>
+      <tr>
+        <td>rank IC near zero everywhere</td>
+        <td>Expected on real data at first. Check <code>diagnose.py</code> output before changing the model</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2><span class="num">07</span> Moving to another machine</h2>
+  <p>Two things carry the project: the <strong>git repo</strong> and your
+  <strong><code>data\</code> folder</strong>. On the new machine, repeat step 01, copy
+  <code>data\</code> across, and run <code>check_data.py</code>.</p>
+  <div class="callout warn">
+    <p><b>Never copy <code>.venv\</code>.</b> It hard-codes absolute paths and will fail in
+    confusing ways. Always recreate it — that is what step 01 is for.</p>
+  </div>
+  <p>Commit your work before switching machines. <code>data\</code> and
+  <code>results\</code> are git-ignored on purpose, so keep them backed up separately if
+  they matter.</p>
+
+  <footer>
+    repo <code>github.com/QuintiviumLabs/Test</code> · branch <code>claude/ipo-prediction-multi-arm-vcr79w</code><br>
+    in-repo references: <code>WINDOWS_QUICKSTART.md</code> · <code>docs\BLOOMBERG_DATA.md</code> · <code>README.md</code>
+  </footer>
+</div>
