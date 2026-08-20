@@ -124,12 +124,17 @@ series. Any market/series you skip simply drops those features.
 ## 8. Bookrunner syndicate block → columns in `ipos.csv`
 
 ```powershell
+python scripts\make_bank_classes.py --file data\ipos.csv --force  # draft the map
+# ...fill in the blank rows at the top of configs\bank_classes.csv...
 python scripts\build_bookrunner_features.py --file data\ipos.csv
 ```
-No Bloomberg needed, but it reads `configs\bank_classes.csv` — a
-hand-maintained map of bank → class (bb/global/regional/local) + home
-region. The shipped file is a SEED: review it and add every bank that
-appears in your `bk_*` columns (the script lists unmatched names).
+No Bloomberg needed. `make_bank_classes.py` reads YOUR bk_* headers and
+pre-fills class (bb/global/regional/local) + home region from a built-in
+taxonomy of ~90 known ECM banks; unknown banks land at the TOP of the file
+with blank cells for you to fill (blank rows are ignored, not defaulted).
+Review the auto-filled rows too — classes are judgment calls — and make
+sure home_region uses the same codes as your ipos.csv market column
+(the script prints your market codes and warns on zero overlap).
 `prestige_rank_max` is computed inside the pipeline (expanding, pre-pricing
 only) — nothing to pull.
 

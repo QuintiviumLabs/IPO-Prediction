@@ -92,6 +92,9 @@ def main() -> None:
         raise SystemExit(f"no {args.prefix}* columns found in {path}")
 
     cl = pd.read_csv(args.classes, comment="#", dtype={"bank": str})
+    # Rows with a blank class (e.g. make_bank_classes.py placeholders you
+    # haven't filled yet) count as unmatched, not as some default class.
+    cl = cl[cl["class"].fillna("").astype(str).str.strip() != ""]
     cl["bank"] = cl["bank"].map(_norm)
     klass = dict(zip(cl["bank"], cl["class"].str.lower()))
     home = dict(zip(cl["bank"], cl["home_region"].astype(str)))
