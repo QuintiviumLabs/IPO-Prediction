@@ -1,22 +1,27 @@
 # Running this on a Windows laptop (with Bloomberg)
 
-The pipeline is plain Python — no databases, no services. You give it **four
-CSV files** in one folder, it does everything else. Moving machines = clone
-the repo + recreate the venv + copy your `data/` folder. Nothing else to
-migrate.
+The pipeline is plain Python — no databases, no services. Four **core CSV
+files** make it runnable; four more optional files (peers, macro, syndicate
+columns, all-deal supply) switch on the newer factor blocks. Moving
+machines = clone the repo + recreate the venv + copy your `data/` folder.
+Nothing else to migrate.
 
 ## How the repo works, in one paragraph
 
-`ipo_model/data/features.py` reads the four CSVs and builds, for every IPO,
-only information observable before its pricing date: the F1–F4 market-state
-factors, a GPR window, and the 1d/3d/1w/1m return targets.
-`ipo_model/data/splits.py` cuts time-ordered train/test folds with the
-overlap purged so no future leaks. Then two model tracks run on identical
-folds: gradient-boosted trees on the engineered features
+`ipo_model/data/features.py` reads the CSVs and builds, for every IPO, only
+information observable before its pricing date: the market-state factor
+blocks (F1–F3 recent deals/breaks/supply, macro state, industry-subgroup
+peers), the bookrunner syndicate block, a GPR window, and the 1d/3d/1w/1m
+targets. `ipo_model/data/splits.py` cuts time-ordered train/test folds with
+the overlap purged so no future leaks. Then two model tracks run on
+identical folds: gradient-boosted trees on the engineered features
 (`scripts/run_baseline.py` — the bar to clear) and the three-arm neural net
-(`scripts/run_full.py`). `scripts/run_ablations.py` runs the whole ladder and
-writes a results table; `scripts/diagnose.py` tells you which features matter
-and where the model fails. `configs/small.yaml` has the right settings for
+(`scripts/run_full.py`); both now predict **P(outperform the benchmark)**
+by default (`model.head: binary`). `scripts/run_ablations.py` runs the
+whole ladder and writes a results table; `scripts/diagnose.py` tells you
+which features matter and where the model fails; `scripts/fit_final.py` +
+`scripts/predict.py` turn the finished model into a saved bundle that
+scores brand-new deals. `configs/small.yaml` has the right settings for
 ~1.5k rows.
 
 ## 1. One-time setup
@@ -28,23 +33,34 @@ and where the model fails. `configs/small.yaml` has the right settings for
 3. In **PowerShell**, in the folder where you want the project:
 
 ```powershell
-git clone https://github.com/QuintiviumLabs/Test.git ipo-model
+git clone https://github.com/QuintiviumLabs/IPO-Prediction.git ipo-model
 cd ipo-model
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 pip install -e .
+pip install -r requirements-extras.txt   # wandb, openpyxl (.xlsx), sklearn, tabpfn
+pip install --index-url https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
+pip install xbbg
 ```
 
 If PowerShell refuses to run the activate script, run this once and retry:
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
-Sanity check the install (uses generated fake data, ~2 min):
+Sanity check the install (no real data needed — the test suite generates
+synthetic data itself, ~1 min; then a demo run, ~2 min):
 
 ```powershell
+pytest -q
 python scripts\make_synthetic_data.py --out demo_data --n-ipos 400
 python scripts\run_baseline.py --data demo_data
+```
+
+With the Terminal running and logged in, confirm the API too:
+
+```powershell
+python -c "from xbbg import blp; print(blp.bdp('AAPL US Equity','PX_LAST'))"
 ```
 
 If that prints per-fold metrics, the environment works. Every later session:
@@ -110,24 +126,68 @@ python scripts\prepare_gpr.py --in Downloads\data_gpr_daily_recent.xls --out dat
 ```
 
 ### deals.csv — optional, recommended (your follow-on data)
-All deal types (IPO, follow-on, convertible) for the supply factors:
-`date,market,sector,proceeds` with sector one of `tmt` / `healthcare` /
-`other`. Without this file, supply factors use IPOs only.
+All deal types (IPO, follow-on, convertible) for the F3 supply factors:
+`date,market,proceeds`. Without this file, supply factors use IPOs only.
 
-## 3. Check, then run
+## 2b. The newer factor data (in this order)
+
+Each step is optional — features whose file is missing are simply skipped —
+but run them in this order because later ones depend on earlier ones. Full
+commands and Terminal specifics: [docs/BLOOMBERG_DATA.md](docs/BLOOMBERG_DATA.md).
 
 ```powershell
-python scripts\check_data.py --data data          # fix anything it flags
-python scripts\run_baseline.py --data data --config configs\small.yaml --engine both
+# 1. Syndicate block (no Bloomberg needed) — FIRST review configs\bank_classes.csv
+#    and add every bank appearing in your bk_* columns (it lists unmatched names)
+python scripts\build_bookrunner_features.py --file data\ipos.csv
+
+# 2. Industry subgroup per company (Terminal running; resumable; smoke test first)
+python scripts\pull_subgroups.py --file data\ipos.csv --limit 5
+python scripts\pull_subgroups.py --file data\ipos.csv
+
+# 3. Peer universe — the ONE manual Terminal step: EQS <GO>, screen your
+#    markets, output ticker + Industry Subgroup (+ market, market_cap) to
+#    Excel, save as data\peer_universe.csv
+
+# 4. Peer trailing returns (resumable; writes the mandatory asof column)
+python scripts\pull_peers.py --data data --k 8 --limit 5
+python scripts\pull_peers.py --data data --k 8
+
+# 5. Macro state (edit the ticker maps to your markets)
+python scripts\pull_macro.py --data data --vol "HK=VHSI Index,US=VIX Index" --fx "HK=USDHKD Curncy,JP=USDJPY Curncy"
+```
+
+## 3. Check, sanity-test, then run
+
+```powershell
+python scripts\check_data.py --data data          # fix anything it flags, re-run until OK
+python scripts\sanity_check.py --data data        # shuffled-label IC must be ~0
+
+python scripts\run_baseline.py --data data --config configs\small.yaml --engine both --tune 40
+python scripts\run_full.py --data data --config configs\small.yaml
 python scripts\run_ablations.py --data data --config configs\small.yaml
+python scripts\analyze_results.py --results results
 python scripts\diagnose.py --data data --config configs\small.yaml
+python scripts\make_report.py --results results   # PM-facing HTML summary
 ```
 
 Results land in `results\` (`ablations.md` is the summary table). Rough
 timings on a laptop CPU: baselines under a minute, the full ladder with the
-small config ~30–60 min. Metrics to look at first: `rank_ic` and
-`decile_spread` — the deep rungs must beat rung `0_lgbm` to justify
-themselves.
+small config ~30–60 min. Under the default binary head, look first at
+`rank_ic`, `auc`, and `quintile_spread` — the deep rungs must beat
+`0_lgbm_tuned` and `00_naive_f1` to justify themselves.
+
+## 4. Deploy: score new deals without retraining
+
+```powershell
+python scripts\fit_final.py --data data --out results\final_model
+# for each new deal: append its row to ipos.csv (no prices needed),
+# refresh peers/macro, then
+python scripts\predict.py --data data --bundle results\final_model --new-only
+```
+
+Optional experiment tracking: `pip install wandb`, set `WANDB_MODE=offline`
+(locked-down machine), and put `train: {wandb: true}` in your YAML config;
+`wandb sync` the run folder later from a machine with internet.
 
 ## Moving to another device later
 
