@@ -38,8 +38,8 @@ f3 — Rolling supply: same-market deal count, log proceeds, IPO count (90d),
 m  — Macro block:
   from market.csv (per-market benchmark): m_geo_mom_63d, m_geo_dd_252,
     m_geo_rvol_21d;
-  from gpr.csv: m_gpr_vol63 (SD of daily changes, annualized — the level
-    itself is deliberately NOT an input; the GPR arm covers level dynamics);
+  (GPR-derived features live in the GPR ARM, not here, so model.use_gpr
+  removes ALL geopolitical-risk information in one switch);
   from macro.csv (date, market, vol_index, fx — optional file/columns):
     m_vol_index_z (252d rolling z), m_fx_ret_21d;
   from macro_global.csv (date, vix, hy_oas, em, acwi — optional):
@@ -78,7 +78,11 @@ import pandas as pd
 
 from ipo_model.config import DataConfig
 
-GPR_FEAT_NAMES = ["gpr_level", "gpr_d5", "gpr_dW", "gpr_meanW", "gpr_stdW"]
+# Engineered GPR summaries. ORDER MATTERS: gpr_vol63 (63d SD of daily
+# changes, annualized — the slow risk-regime signal) must stay LAST — the
+# gru-mode GPR arm consumes the sequence plus this final column.
+GPR_FEAT_NAMES = ["gpr_level", "gpr_d5", "gpr_dW", "gpr_meanW", "gpr_stdW",
+                  "gpr_vol63"]
 
 # Bookrunner-syndicate columns consumed from ipos.csv when present.
 STATIC_EXTRA_BINARY = ["has_bb", "has_global", "has_regional", "has_local",
@@ -147,7 +151,7 @@ class FeatureSet:
     momentum: np.ndarray          # (N, F) float32 — f1/f2/f3/m/p1 blocks
     momentum_names: list[str]
     gpr_seq: np.ndarray           # (N, W) float32 — raw GPR levels
-    gpr_feats: np.ndarray         # (N, 5) float32 — see GPR_FEAT_NAMES
+    gpr_feats: np.ndarray         # (N, 6) float32 — see GPR_FEAT_NAMES
 
     def __len__(self) -> int:
         return len(self.ids)
@@ -429,15 +433,23 @@ def build_features(raw: RawData, cfg: DataConfig,
         if "ipo_id" not in pr.columns or "ret_21d" not in pr.columns:
             raise ValueError("peers.csv needs at least (ipo_id, ret_21d); "
                              "run scripts/pull_peers.py to produce it")
-        if "asof" in pr.columns:
-            ft = ipos.set_index("ipo_id")["first_trade_date"]
-            joined = pr.join(ft, on="ipo_id", how="inner")
-            bad = joined[joined["asof"] >= joined["first_trade_date"]]
-            if len(bad):
-                raise ValueError(
-                    f"peers.csv: {len(bad)} rows have asof >= first_trade_date "
-                    f"(e.g. {bad['ipo_id'].iloc[0]}) — peer features must be "
-                    "computed strictly before pricing")
+        # The asof column is MANDATORY: without it there is no way to prove
+        # the peer returns were observable at pricing, and silent look-ahead
+        # here would inflate IC. pull_peers.py always writes it.
+        if "asof" not in pr.columns:
+            raise ValueError(
+                "peers.csv has no asof column — cannot verify the peer "
+                "returns are strictly pre-pricing. Re-pull with "
+                "scripts/pull_peers.py, or add asof (the last price date "
+                "used) to every row.")
+        ft = ipos.set_index("ipo_id")["first_trade_date"]
+        joined = pr.join(ft, on="ipo_id", how="inner")
+        bad = joined[joined["asof"] >= joined["first_trade_date"]]
+        if len(bad):
+            raise ValueError(
+                f"peers.csv: {len(bad)} rows have asof >= first_trade_date "
+                f"(e.g. {bad['ipo_id'].iloc[0]}) — peer features must be "
+                "computed strictly before pricing")
         for ipo_id, g in pr.groupby("ipo_id"):
             r21 = g["ret_21d"].dropna().to_numpy(float)
             r63 = (g["ret_63d"].dropna().to_numpy(float)
@@ -461,7 +473,6 @@ def build_features(raw: RawData, cfg: DataConfig,
         f2_names += [f"f2_break_{t}", f"f2_depth_{t}"]
     f3_names = ["f3_cnt_3m", "f3_prc_3m", "f3_ipo_cnt_3m", "f3_accel"]
     m_names = ["m_geo_mom_63d", "m_geo_dd_252", "m_geo_rvol_21d",
-               "m_gpr_vol63",
                "m_regime_hot", "m_regime_cold"]
     if "vol_index" in macro_cols:
         m_names.append("m_vol_index_z")
@@ -565,13 +576,6 @@ def build_features(raw: RawData, cfg: DataConfig,
             vals["m_geo_dd_252"] = 0.0
             vals["m_geo_rvol_21d"] = 0.0
 
-        gi = _asof_idx(gpr_dates, t0)
-        if gi >= 62:
-            gwin = gpr_vals[gi - 62: gi + 1]
-            vals["m_gpr_vol63"] = float(np.diff(gwin).std() * np.sqrt(252))
-        else:
-            vals["m_gpr_vol63"] = 0.0
-
         # regime: mean pop of the prior `regime_pop_window` same-market IPOs
         pops = []
         for j in range(hi - 1, -1, -1):
@@ -659,8 +663,15 @@ def build_features(raw: RawData, cfg: DataConfig,
             window = np.concatenate([np.full(W - len(window), window[0]), window])
         gpr_seqs.append(window.astype(np.float32))
         d5 = window[-1] - window[-6] if W >= 6 else 0.0
+        # Slow risk-regime signal: 63d SD of daily changes, annualized.
+        # Lives in the GPR arm (not the macro block) so use_gpr removes all
+        # GPR information and FiLM can condition on risk volatility.
+        g63 = gpr_vals[max(0, pos - 63): pos]
+        vol63 = (float(np.diff(g63).std() * np.sqrt(252))
+                 if len(g63) >= 63 else 0.0)
         gpr_feats.append(np.array([
             window[-1], d5, window[-1] - window[0], window.mean(), window.std(),
+            vol63,
         ], dtype=np.float32))
 
     rows = np.asarray(rows)

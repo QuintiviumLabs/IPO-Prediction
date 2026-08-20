@@ -17,12 +17,13 @@ def test_f4_removed(fs):
 
 def test_macro_block_present_and_sane(fs):
     for n in ["m_geo_mom_63d", "m_geo_dd_252", "m_geo_rvol_21d",
-              "m_gpr_vol63", "m_regime_hot", "m_regime_cold",
+              "m_regime_hot", "m_regime_cold",
               "m_vol_index_z", "m_fx_ret_21d", "m_vix_z", "m_vix_chg_21d",
               "m_hy_oas_z", "m_em_vs_dm_63d"]:
         assert n in fs.momentum_names, n
-    # the GPR level/mean is deliberately NOT an input (the GPR arm covers it)
-    assert "m_gpr_mean63" not in fs.momentum_names
+    # ALL GPR-derived features live in the GPR arm, not the macro block —
+    # use_gpr must remove every trace of geopolitical risk in one switch.
+    assert not [n for n in fs.momentum_names if "gpr" in n]
     assert np.isfinite(fs.momentum).all()
     # drawdown is <= 0 by construction; regime flags are exclusive binaries
     assert (_col(fs, "m_geo_dd_252") <= 1e-9).all()
@@ -46,6 +47,13 @@ def test_peer_block_matches_raw(fs, raw):
         assert _col(fs, "p1_n")[i] == len(g)
         assert np.isclose(_col(fs, "p1_med_21d")[i],
                           np.median(g["ret_21d"]), atol=1e-6)
+
+
+def test_peers_missing_asof_rejected(small_data, cfg):
+    raw = load_raw(small_data)
+    raw.peers = raw.peers.drop(columns=["asof"])
+    with pytest.raises(ValueError, match="asof"):
+        build_features(raw, cfg.data)
 
 
 def test_peers_asof_on_pricing_date_rejected(small_data, cfg):
@@ -102,6 +110,51 @@ def test_prestige_expanding_and_bounded(fs, raw, cfg):
     for i in list(common)[:50]:
         assert np.isclose(fs.static_extra[idx1[i], j],
                           fs2.static_extra[idx2[i], j2], atol=1e-12)
+
+
+def test_gpr_vol63_lives_in_gpr_arm(fs, raw):
+    from ipo_model.data.features import GPR_FEAT_NAMES
+    assert GPR_FEAT_NAMES[-1] == "gpr_vol63"   # gru head slices the last col
+    j = GPR_FEAT_NAMES.index("gpr_vol63")
+    g = raw.gpr.sort_values("date")
+    dates, vals = g["date"].to_numpy(), g["gpr"].to_numpy(float)
+    for i in range(0, len(fs), 97):            # hand-recompute a few rows
+        pos = int(np.searchsorted(dates, fs.dates[i], side="left"))
+        g63 = vals[max(0, pos - 63): pos]
+        exp = (float(np.diff(g63).std() * np.sqrt(252))
+               if len(g63) >= 63 else 0.0)
+        assert np.isclose(float(fs.gpr_feats[i, j]), exp, rtol=1e-4)
+
+
+def test_gru_arm_consumes_vol63_and_only_vol63():
+    import torch
+    from ipo_model.config import Config
+    from ipo_model.models.model import GPRArm
+    cfg = Config().model
+    assert cfg.gpr_mode == "gru"
+    torch.manual_seed(0)
+    arm = GPRArm(cfg, n_engineered=6)
+    arm.eval()
+    seq = torch.randn(4, 21)
+    feats = torch.randn(4, 6)
+    with torch.no_grad():
+        base = arm(seq, feats)
+        bumped_last = feats.clone(); bumped_last[:, -1] += 1.0
+        bumped_other = feats.clone(); bumped_other[:, 0] += 1.0
+        assert not torch.allclose(arm(seq, bumped_last), base)   # vol63 used
+        assert torch.allclose(arm(seq, bumped_other), base)      # others: GRU-only
+
+
+def test_legacy_lstm_alias_still_works():
+    import torch
+    from ipo_model.config import Config
+    from ipo_model.models.model import GPRArm
+    old = Config().override(**{"model.gpr_mode": "lstm"}).model
+    arm = GPRArm(old, n_engineered=6)
+    assert arm.mode == "gru"
+    with torch.no_grad():
+        out = arm(torch.randn(2, 21), torch.randn(2, 6))
+    assert out.shape == (2, old.gpr_out)
 
 
 def test_expanding_terciles_unit():

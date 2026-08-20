@@ -223,7 +223,7 @@
       <text x="676" y="102" class="t-title" fill="var(--risk)">GEOPOLITICAL RISK</text>
       <polyline points="676,162 700,156 724,160 748,148 772,154 796,136 820,144 844,130 868,138 892,126" fill="none" stroke="var(--risk)" stroke-width="1.8"/>
       <circle cx="892" cy="126" r="3.4" fill="var(--risk)"/>
-      <text x="676" y="198" class="t-sub">daily GPR index, last 21 days · levels or Δ (config)</text>
+      <text x="676" y="198" class="t-sub">daily GPR index: 21d window + 63d change-vol · levels or Δ</text>
 
       <!-- arrows into encoders -->
       <line x1="160" y1="212" x2="160" y2="236" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
@@ -240,8 +240,8 @@
       <text x="480" y="288" text-anchor="middle" class="t-sub">F3 · regime · z-scores computed expanding — own past only</text>
 
       <rect x="660" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.3"/>
-      <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 8)</text>
-      <text x="800" y="288" text-anchor="middle" class="t-sub">ablations swap in: level only · 5 summaries</text>
+      <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 8) ⊕ 63d GPR vol</text>
+      <text x="800" y="288" text-anchor="middle" class="t-sub">ablations swap in: level only · 6 summaries</text>
 
       <!-- arrows to z chips -->
       <line x1="160" y1="306" x2="160" y2="330" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#arr)"/>
@@ -421,8 +421,10 @@
     <li><div>
       <b>Encode each source in its own arm</b>
       <p>Banks become a mean of learned 4-d embeddings inside the static arm; the factor block
-      passes through a small MLP; a GRU reads the GPR window (with "level only" and "5 summaries"
-      as ablation alternatives).</p>
+      passes through a small MLP; a GRU reads the GPR window, with the slow 63-day GPR
+      change-volatility fed to the same head — every GPR-derived signal lives in this one arm,
+      so <code>use_gpr</code> removes it all and FiLM conditions on the full risk regime
+      ("level only" and "6 summaries" remain as ablation alternatives).</p>
     </div></li>
     <li><div>
       <b>Condition on the regime (V2)</b>

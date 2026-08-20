@@ -29,7 +29,7 @@ model:
   # f1 recent-deal perf | f2 break rate | f3 supply | m macro | p1 peers
   momentum_groups: [f1, f2, f3, m, p1]
   use_gpr: true
-  gpr_mode: lstm            # level | engineered | lstm
+  gpr_mode: gru             # level | engineered | gru (lstm = legacy alias)
   gating: none              # none | film
   dropout: 0.25
 

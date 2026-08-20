@@ -114,8 +114,10 @@ class ModelConfig:
     #   p1 industry-subgroup peer returns (needs peers.csv)
     momentum_groups: tuple[str, ...] = ("f1", "f2", "f3", "m", "p1")
     use_gpr: bool = True
-    gpr_mode: str = "lstm"          # "level" | "engineered" | "lstm"
-    # What the lstm-mode GPR arm consumes: raw standardized "level"s, or
+    gpr_mode: str = "gru"           # "level" | "engineered" | "gru"
+    # ("lstm" is accepted as a legacy alias for "gru" — the recurrent
+    # encoder has always been an nn.GRU; the old name was a misnomer.)
+    # What the gru-mode GPR arm consumes: raw standardized "level"s, or
     # day-over-day "change"s (first differences of the window). Risk shocks
     # are plausibly what matters, not the index's absolute height. Ignored by
     # the "level"/"engineered" modes (engineered already carries d5/dW).

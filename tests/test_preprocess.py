@@ -33,7 +33,7 @@ def test_engineered_table_contains_factor_block(fs, cfg):
     assert X.notna().all().all()
     for col in ["f1_med_1d", "f1_vw_1w", "f2_break_1d", "f2_depth_1w",
                 "f3_cnt_3m", "f3_accel",
-                "m_geo_mom_63d", "m_gpr_vol63", "m_regime_hot",
+                "m_geo_mom_63d", "m_regime_hot", "gpr_vol63",
                 "m_vol_index_z", "m_vix_z", "m_hy_oas_z", "m_em_vs_dm_63d",
                 "p1_med_21d", "p1_n",
                 "n_banks", "has_bb", "prestige_rank_max", "archetype_bb_dom",

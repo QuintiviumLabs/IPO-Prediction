@@ -6,8 +6,11 @@
   MOMENTUM ARM   the engineered market-state block (F1 recent-deal
                  performance, F2 break rate/depth, F3 rolling supply,
                  macro state, subgroup peers) -> small MLP -> z_mom
-  GPR ARM        "level" (last value), "engineered" (5 summaries -> MLP),
-                 or "lstm" (GRU over the daily window) -> z_gpr
+  GPR ARM        "level" (last value), "engineered" (6 summaries -> MLP),
+                 or "gru" (GRU over the daily window + the slow 63d GPR
+                 change-vol) -> z_gpr. ALL GPR-derived information lives in
+                 this arm, so use_gpr removes it in one switch and FiLM can
+                 condition on the risk regime.
   GATING         optional FiLM: z_gpr modulates BOTH z_static and z_mom
                  (scale + shift, zero-initialized so training starts at
                  identity) — "the geopolitical regime decides how much deal
@@ -75,9 +78,16 @@ class MomentumArm(nn.Module):
 
 
 class GPRArm(nn.Module):
+    """level:      the bare last value (ablation floor)
+    engineered:    MLP over the summary vector (incl. gpr_vol63)
+    gru:           GRU over the 21d window, PLUS the slow 63d change-vol
+                   (the LAST engineered column) fed straight to the head —
+                   the GRU's window is too short to compute it itself."""
+
     def __init__(self, cfg: ModelConfig, n_engineered: int):
         super().__init__()
-        self.mode = cfg.gpr_mode
+        # "lstm" is the legacy name for the GRU mode; accept both.
+        self.mode = "gru" if cfg.gpr_mode == "lstm" else cfg.gpr_mode
         self.input_mode = cfg.gpr_input
         if self.input_mode not in ("level", "change"):
             raise ValueError(f"Unknown gpr_input: {self.input_mode}")
@@ -86,9 +96,9 @@ class GPRArm(nn.Module):
         elif self.mode == "engineered":
             self.net = mlp([n_engineered, cfg.gpr_hidden, cfg.gpr_out],
                            cfg.dropout, out_act=True)
-        elif self.mode == "lstm":
+        elif self.mode == "gru":
             self.gru = nn.GRU(1, cfg.gpr_hidden, batch_first=True)
-            self.head = nn.Linear(cfg.gpr_hidden, cfg.gpr_out)
+            self.head = nn.Linear(cfg.gpr_hidden + 1, cfg.gpr_out)
         else:
             raise ValueError(f"Unknown gpr_mode: {self.mode}")
 
@@ -100,7 +110,7 @@ class GPRArm(nn.Module):
         if self.input_mode == "change":  # day-over-day risk shocks, not height
             seq = seq[:, 1:] - seq[:, :-1]
         out, _ = self.gru(seq.unsqueeze(2))
-        return self.head(out[:, -1])
+        return self.head(torch.cat([out[:, -1], feats[:, -1:]], dim=1))
 
 
 class FiLM(nn.Module):

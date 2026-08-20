@@ -234,8 +234,9 @@ def main() -> None:
                               "first_trade_date — peer features must be "
                               "strictly pre-pricing (re-run pull_peers.py)")
         elif "asof" not in pr.columns:
-            warns.append("peers.csv: no asof column — the pipeline cannot "
-                         "verify the peer returns are pre-pricing")
+            errors.append("peers.csv: no asof column — the pipeline cannot "
+                          "verify the peer returns are pre-pricing and will "
+                          "refuse the file (re-run scripts/pull_peers.py)")
         if "ipo_id" in pr.columns:
             cov = pr["ipo_id"].nunique()
             infos.append(f"peers.csv covers {cov}/{len(ipos)} IPOs "

@@ -45,12 +45,12 @@ RUNGS: dict[str, dict[str, Any]] = {
     "4_momentum+gpr_level": {"model.use_momentum": True, "model.use_gpr": True,
                              "model.gpr_mode": "level"},
     "5_full_v1": {"model.use_momentum": True, "model.use_gpr": True,
-                  "model.gpr_mode": "lstm", "model.gating": "none"},
+                  "model.gpr_mode": "gru", "model.gating": "none"},
     "5b_full_gpr_change": {"model.use_momentum": True, "model.use_gpr": True,
-                           "model.gpr_mode": "lstm", "model.gpr_input": "change",
+                           "model.gpr_mode": "gru", "model.gpr_input": "change",
                            "model.gating": "none"},
     "6_full_v2_film": {"model.use_momentum": True, "model.use_gpr": True,
-                       "model.gpr_mode": "lstm", "model.gating": "film"},
+                       "model.gpr_mode": "gru", "model.gating": "film"},
 }
 
 # Optional add-on rungs (ipo_model/extras). NOT in the default ladder — they
