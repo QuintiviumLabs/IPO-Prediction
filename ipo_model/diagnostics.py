@@ -39,6 +39,7 @@ def _feature_groups(cfg: Config, fs: FeatureSet) -> dict[str, tuple]:
     if cfg.data.include_market_onehot:
         binary_names += [f"mkt_{m}" for m in fs.market_names]
     binary_names += ["n_bookrunners"]
+    binary_names += list(fs.static_extra_names)   # syndicate extras ride here
     for j, n in enumerate(binary_names):
         groups[n] = ("static_binary", [j])
     groups["bookrunners"] = ("static_bk", None)

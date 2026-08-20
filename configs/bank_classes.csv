@@ -1,0 +1,34 @@
+bank,class,home_region
+# SEED TEMPLATE — REVIEW AND EXTEND BY HAND before running
+# scripts/build_bookrunner_features.py. `bank` must match the bk_ column
+# suffix in ipos.csv after normalization (lowercase; spaces/punct -> _).
+# class: bb (bulge bracket) | global | regional | local
+# home_region: market code as used in your ipos.csv market column (US, HK,
+# CN, JP, EU, ...) — drives has_domestic. One row per bank.
+goldman_sachs,bb,US
+morgan_stanley,bb,US
+jpmorgan,bb,US
+bofa,bb,US
+citi,bb,US
+ubs,global,EU
+barclays,global,EU
+deutsche_bank,global,EU
+hsbc,global,HK
+credit_suisse,global,EU
+jefferies,global,US
+nomura,regional,JP
+daiwa,regional,JP
+mizuho,regional,JP
+cicc,regional,CN
+citic,regional,CN
+huatai,regional,CN
+haitong,regional,CN
+clsa,regional,HK
+bnp_paribas,regional,EU
+societe_generale,regional,EU
+standard_chartered,regional,HK
+dbs,local,SG
+ocbc,local,SG
+kb_securities,local,KR
+mirae_asset,local,KR
+guotai_junan,local,CN

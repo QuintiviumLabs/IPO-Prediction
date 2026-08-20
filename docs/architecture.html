@@ -162,15 +162,16 @@
     <p class="eyebrow">Model architecture</p>
     <h1>Three-Arm IPO Model</h1>
     <p class="standfirst">
-      How one target IPO's observable world — its deal traits, the state of its own IPO
-      market (factors F1–F4), and the geopolitical backdrop — becomes a forecast
+      How one target IPO's observable world — its deal traits and syndicate, the state of its
+      own IPO market (recent deals, supply, macro, sector peers), and the geopolitical
+      backdrop — becomes a forecast
       distribution of <em>outperformance vs its own market's benchmark index</em> at four
       horizons, with the 1-month outperformance as the target — anchored at the offer
       price (includes the first-day pop) or at the first close (aftermarket drift only).
     </p>
     <div class="legend">
       <span><i class="swatch" style="background:var(--static)"></i> deal traits (static)</span>
-      <span><i class="swatch" style="background:var(--panel)"></i> market state · F1–F4 (same market)</span>
+      <span><i class="swatch" style="background:var(--panel)"></i> market state · F1–F3 + macro + peers</span>
       <span><i class="swatch" style="background:var(--risk)"></i> geopolitical risk (daily GPR index)</span>
     </div>
   </header>
@@ -178,7 +179,7 @@
   <figure>
     <div class="figcard">
     <svg viewBox="0 0 960 944" role="img"
-         aria-label="Data-flow diagram: three input sources — deal traits, the F1 to F4 market-state factor block, and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 20-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons; the 1-month median is the point forecast, optionally mapped back from rank space and conformally calibrated per tail.">
+         aria-label="Data-flow diagram: three input sources — deal traits with the bookrunner syndicate block, the market-state factor block (recent-deal performance, supply, macro, sector peers), and the geopolitical risk window — are encoded by three separate arms, optionally modulated by the risk representation via FiLM gates, concatenated into a 20-dimensional vector, fused by an MLP, and emitted as quantile forecasts at four horizons; the 1-month median is the point forecast, optionally mapped back from rank space and conformally calibrated per tail.">
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
@@ -201,11 +202,12 @@
       <!-- ===== Input cards ===== -->
       <!-- A: deal traits -->
       <rect x="20" y="78" width="280" height="134" rx="8" fill="var(--static-soft)" stroke="var(--static)" stroke-width="1.3"/>
-      <text x="36" y="102" class="t-title" fill="var(--static)">DEAL TRAITS</text>
-      <text x="36" y="128" class="t-mono">TMT · healthcare flags</text>
-      <text x="36" y="150" class="t-mono">market one-hot (optional, off)</text>
-      <text x="36" y="172" class="t-mono">bookrunner multi-hot</text>
-      <text x="36" y="196" class="t-mono">bookrunner count</text>
+      <text x="36" y="100" class="t-title" fill="var(--static)">DEAL TRAITS + SYNDICATE</text>
+      <text x="36" y="122" class="t-mono">TMT · healthcare flags</text>
+      <text x="36" y="141" class="t-mono">bookrunner multi-hot · count</text>
+      <text x="36" y="160" class="t-mono">syndicate: size · class flags · combos</text>
+      <text x="36" y="179" class="t-mono">archetype one-hot · prestige rank</text>
+      <text x="36" y="201" class="t-sub">market one-hot optional (off) · prestige = expanding 3y IPO share</text>
 
       <!-- B: market state factors -->
       <rect x="340" y="78" width="280" height="134" rx="8" fill="var(--panel-soft)" stroke="var(--panel)" stroke-width="1.3"/>
@@ -213,8 +215,8 @@
       <text x="356" y="122" class="t-mono">F1  median · VW return (1d, 1w)</text>
       <text x="356" y="141" class="t-mono">F2  break rate · downside depth</text>
       <text x="356" y="160" class="t-mono">F3  supply: count · proceeds · accel</text>
-      <text x="356" y="179" class="t-mono">F4  sector density (3m · 30d)</text>
-      <text x="356" y="201" class="t-sub">≤10 same-market deals, 90d · universe rows widen pool</text>
+      <text x="356" y="179" class="t-mono">M   macro: index · vol · FX · regime</text>
+      <text x="356" y="198" class="t-mono">P1  subgroup peer returns</text>
 
       <!-- C: geopolitical risk -->
       <rect x="660" y="78" width="280" height="134" rx="8" fill="var(--risk-soft)" stroke="var(--risk)" stroke-width="1.3"/>
@@ -235,7 +237,7 @@
 
       <rect x="340" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--panel)" stroke-width="1.3"/>
       <text x="480" y="266" text-anchor="middle" class="t-mono-b">MLP 16 → 8</text>
-      <text x="480" y="288" text-anchor="middle" class="t-sub">F3/F4 arrive as expanding-window z-scores</text>
+      <text x="480" y="288" text-anchor="middle" class="t-sub">F3 · regime · z-scores computed expanding — own past only</text>
 
       <rect x="660" y="240" width="280" height="66" rx="8" fill="var(--surface)" stroke="var(--risk)" stroke-width="1.3"/>
       <text x="800" y="266" text-anchor="middle" class="t-mono-b">GRU (hidden 8)</text>
@@ -346,11 +348,14 @@
     </svg>
     </div>
     <figcaption>
-      <strong>The forward pass.</strong> The momentum arm now encodes an engineered factor block —
+      <strong>The forward pass.</strong> The momentum arm encodes an engineered factor block —
       F1 recent-deal performance (median + value-weighted, ≤10 same-market deals in 90 days),
-      F2 break-issue rate and downside depth, F3 rolling supply, F4 sector issuance density —
-      with every return admitted only if it was observable before t₀, and F3/F4 z-scored against
-      each market's own expanding history. Dashed paths exist only in the V2 configuration:
+      F2 break-issue rate and downside depth, F3 rolling supply, a macro block (local index
+      state, vol/FX, global risk, Hot/Cold issuance regime by expanding terciles), and P1
+      industry-subgroup peer returns — with every return admitted only if it was observable
+      before t₀, and every expanding statistic computed against each market's own past only.
+      The static arm gained the bookrunner-syndicate block: size, bank-class flags,
+      archetype, and an expanding prestige rank. Dashed paths exist only in the V2 configuration:
       FiLM lets the risk regime decide how loudly deal quality and market momentum speak.
       During training, an optional group-lasso penalty (<code>l1_input</code>) zeroes the
       first-layer columns of inputs that earn no keep — structured pruning, reported per
@@ -410,9 +415,11 @@
   <ol class="steps">
     <li><div>
       <b>Gather only what was knowable</b>
-      <p>At pricing date t₀: the deal's static traits, and the F1–F4 factor block computed over
-      same-market history — a recent deal's h-day return enters F1/F2 only if its h-th close
-      predates t₀ — plus 21 days of the daily GPR index. Nothing dated t₀ or later is admitted;
+      <p>At pricing date t₀: the deal's static traits and syndicate block, and the factor block
+      (F1–F3, macro state, subgroup peers) computed over same-market history — a recent deal's
+      h-day return enters F1/F2 only if its h-th close predates t₀, and peer returns carry an
+      as-of stamp the pipeline validates — plus 21 days of the daily GPR index. Nothing dated
+      t₀ or later is admitted;
       <code>features.py</code> enforces the cutoff and a prefix-stability test proves even the
       expanding z-scores are unchanged when future IPOs are deleted from the dataset.
       The target anchors at the offer price (includes the pop) or at the first close
@@ -448,13 +455,21 @@
       because the measured miss is asymmetric — the upper tail is exceeded far more often
       than nominal.</p>
     </div></li>
+    <li><div>
+      <b>Deploy once, score forever</b>
+      <p><code>fit_final.py</code> trains on all labeled deals and saves a bundle — weights per
+      seed, the fold scaler, the label transform, and the feature schema. A brand-new IPO that
+      hasn't traded yet needs only its row in <code>ipos.csv</code>;
+      <code>predict.py --new-only</code> rebuilds its features as of pricing and emits the
+      quantiles. No retraining, and the bundle refuses data whose schema drifted from training.</p>
+    </div></li>
   </ol>
 
   <footer>
     model <code>ipo_model/models/model.py</code> ·
     factors <code>ipo_model/data/features.py</code> ·
     training <code>ipo_model/training/loop.py</code> ·
-    calibration <code>scripts/calibrate_intervals.py</code> · GPR prep <code>scripts/prepare_gpr.py</code><br>
+    calibration <code>scripts/calibrate_intervals.py</code> · deploy <code>scripts/fit_final.py</code> + <code>scripts/predict.py</code><br>
     branch <code>claude/ipo-prediction-multi-arm-vcr79w</code> · sizes shown are the defaults in <code>ipo_model/config.py</code>
   </footer>
 </div>

@@ -10,7 +10,8 @@ data:
   momentum_horizons: [1, 5]
   supply_window_days: 90
   supply_trailing_days: 365
-  sector_30d_days: 30
+  prestige_years: 3         # bookrunner prestige: trailing IPO-share window
+  regime_pop_window: 10     # market regime: mean pop of prior N same-market IPOs
   gpr_window: 21
   min_bookrunner_deals: 20
 
@@ -22,7 +23,8 @@ split:
 
 model:
   use_momentum: true
-  momentum_groups: [f1, f2, f3, f4]
+  # f1 recent-deal perf | f2 break rate | f3 supply | m macro | p1 peers
+  momentum_groups: [f1, f2, f3, m, p1]
   use_gpr: true
   gpr_mode: lstm            # level | engineered | lstm
   gating: none              # none | film

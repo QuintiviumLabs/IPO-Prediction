@@ -169,17 +169,80 @@ def main() -> None:
 
     # ---- deals.csv (optional) ----
     if deals is not None:
-        for c in ("date", "market", "sector", "proceeds"):
+        for c in ("date", "market", "proceeds"):
             if c not in deals.columns:
                 errors.append(f"deals.csv: missing column '{c}'")
-        if "sector" in deals.columns:
-            bad = set(deals["sector"].astype(str).unique()) - {"tmt", "healthcare", "other"}
-            if bad:
-                warns.append(f"deals.csv: unrecognized sector labels {sorted(bad)} "
-                             "(expected tmt/healthcare/other) — they will never "
-                             "match a target's sector")
     else:
-        warns.append("no deals.csv — F3/F4 supply factors fall back to IPO-only")
+        warns.append("no deals.csv — F3 supply factors fall back to IPO-only")
+
+    # ---- syndicate extras in ipos.csv (optional) ----
+    if ipos is not None:
+        synd = [c for c in ("n_banks", "has_bb", "prestige_rank_max")
+                if c in ipos.columns]
+        arch = [c for c in ipos.columns if c.startswith("archetype_")]
+        if synd or arch:
+            infos.append(f"syndicate block present: {synd + arch[:3]}"
+                         + (" ..." if len(arch) > 3 else ""))
+        else:
+            infos.append("no syndicate columns (n_banks/has_*/archetype_*) — "
+                         "run scripts/build_bookrunner_features.py to add them")
+        if "subgroup" in ipos.columns:
+            n_sg = int(ipos["subgroup"].notna().sum())
+            infos.append(f"subgroup present on {n_sg}/{len(ipos)} rows")
+        else:
+            infos.append("no subgroup column — run scripts/pull_subgroups.py "
+                         "(needed for the peer block)")
+
+    # ---- macro.csv / macro_global.csv (optional) ----
+    if (d / "macro.csv").exists():
+        mc = pd.read_csv(d / "macro.csv")
+        if not {"date", "market"} <= set(mc.columns):
+            errors.append("macro.csv: needs columns (date, market, ...)")
+        else:
+            got = [c for c in ("vol_index", "fx") if c in mc.columns]
+            infos.append(f"macro.csv present with {got} for markets "
+                         f"{sorted(mc['market'].astype(str).unique())}")
+    else:
+        infos.append("no macro.csv — local vol/FX macro features skipped "
+                     "(scripts/pull_macro.py)")
+    if (d / "macro_global.csv").exists():
+        mg = pd.read_csv(d / "macro_global.csv")
+        if "date" not in mg.columns:
+            errors.append("macro_global.csv: needs a date column")
+        else:
+            got = [c for c in ("vix", "hy_oas", "em", "acwi") if c in mg.columns]
+            infos.append(f"macro_global.csv present with {got}")
+    else:
+        infos.append("no macro_global.csv — global risk features skipped "
+                     "(scripts/pull_macro.py)")
+
+    # ---- peers.csv (optional) ----
+    if (d / "peers.csv").exists() and ipos is not None:
+        pr = pd.read_csv(d / "peers.csv")
+        for c in ("ipo_id", "ret_21d"):
+            if c not in pr.columns:
+                errors.append(f"peers.csv: missing column '{c}'")
+        if "asof" in pr.columns and "ipo_id" in pr.columns \
+                and {"ipo_id", "first_trade_date"} <= set(ipos.columns):
+            asof = pd.to_datetime(pr["asof"], errors="coerce")
+            ft = pr["ipo_id"].map(dict(zip(
+                ipos["ipo_id"],
+                pd.to_datetime(ipos["first_trade_date"], errors="coerce"))))
+            late = int((asof >= ft).sum())
+            if late:
+                errors.append(f"peers.csv: {late} rows have asof >= the IPO's "
+                              "first_trade_date — peer features must be "
+                              "strictly pre-pricing (re-run pull_peers.py)")
+        elif "asof" not in pr.columns:
+            warns.append("peers.csv: no asof column — the pipeline cannot "
+                         "verify the peer returns are pre-pricing")
+        if "ipo_id" in pr.columns:
+            cov = pr["ipo_id"].nunique()
+            infos.append(f"peers.csv covers {cov}/{len(ipos)} IPOs "
+                         f"({len(pr)} peer rows)")
+    else:
+        infos.append("no peers.csv — subgroup peer (p1) features skipped "
+                     "(scripts/pull_peers.py)")
 
     print(f"\n{'='*60}\nData check: {d}/")
     for i in infos:

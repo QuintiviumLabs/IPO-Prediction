@@ -57,15 +57,21 @@ def test_prefix_stability_no_future_dependence(raw, cfg):
     trunc_ipos = raw.ipos[raw.ipos["first_trade_date"] <= cutoff]
     trunc_prices = raw.prices[raw.prices["ipo_id"].isin(trunc_ipos["ipo_id"])]
     from ipo_model.data.features import RawData
+    trunc_peers = (raw.peers[raw.peers["ipo_id"].isin(trunc_ipos["ipo_id"])]
+                   if raw.peers is not None else None)
     part = build_features(
         RawData(ipos=trunc_ipos, prices=trunc_prices, gpr=raw.gpr,
-                market=raw.market, deals=raw.deals),
+                market=raw.market, deals=raw.deals, macro=raw.macro,
+                macro_global=raw.macro_global, peers=trunc_peers),
         cfg.data,
     )
     n = len(part)
     assert n > 50
     assert (full.ids[:n] == part.ids[:n]).all()
     np.testing.assert_allclose(full.momentum[:n], part.momentum[:n], atol=1e-6)
+    # the expanding prestige computation must be prefix-stable too
+    np.testing.assert_allclose(full.static_extra[:n], part.static_extra[:n],
+                               atol=1e-12)
 
 
 def test_gpr_window_strictly_before_pricing(fs, raw):

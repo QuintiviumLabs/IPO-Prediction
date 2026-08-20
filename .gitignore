@@ -2,7 +2,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.egg-info/
-data/
-results/
+# Anchored to the repo root: a bare "data/" would also ignore the
+# ipo_model/data/ PACKAGE (it silently kept the whole data pipeline out of
+# git until 2026-08).
+/data/
+/results/
 .venv/
 *.log
+wandb/

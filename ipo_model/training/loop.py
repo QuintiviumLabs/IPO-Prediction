@@ -68,9 +68,24 @@ def _build_model(cfg: Config, tensors: dict[str, torch.Tensor]) -> ThreeArmModel
     )
 
 
+def _wandb_or_none(cfg: Config):
+    """Lazy wandb import, only when train.wandb=True. On a locked-down
+    machine: set WANDB_MODE=offline and `wandb sync` later."""
+    if not cfg.train.wandb:
+        return None
+    try:
+        import wandb
+    except ImportError as e:
+        raise ImportError(
+            "train.wandb=True but wandb is not installed — "
+            "pip install wandb (it's in requirements-extras.txt), "
+            "or set train.wandb=False") from e
+    return wandb
+
+
 def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
               targets: dict[int, torch.Tensor], fold: Fold,
-              seed: int) -> tuple[ThreeArmModel, float]:
+              seed: int, epoch_log=None) -> tuple[ThreeArmModel, float]:
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     device = cfg.train.device
@@ -109,6 +124,8 @@ def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
                 model(val_t), y_val,
                 cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
             ))
+        if epoch_log is not None:
+            epoch_log(_epoch, val_loss)
         if val_loss < best_val - 1e-6:
             best_val = val_loss
             best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
@@ -129,6 +146,12 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
     device = cfg.train.device
     main_h = cfg.main_horizon
     results: list[FoldResult] = []
+
+    wb = _wandb_or_none(cfg)
+    if wb is not None:
+        import dataclasses as _dc
+        wb.init(project=cfg.train.wandb_project, config=_dc.asdict(cfg),
+                reinit=True)
 
     for k, fold in enumerate(folds):
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
@@ -152,7 +175,12 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
 
         preds_per_seed, val_losses = [], []
         for seed in cfg.train.seeds:
-            model, val_loss = train_one(cfg, tensors, targets, fold, seed)
+            cb = None
+            if wb is not None:
+                def cb(e, v, _k=k, _s=seed):
+                    wb.log({f"fold{_k}/seed{_s}/val_loss": v, "epoch": e})
+            model, val_loss = train_one(cfg, tensors, targets, fold, seed,
+                                        epoch_log=cb)
             with torch.no_grad():
                 q = model(_slice(tensors, fold.test_idx))[main_h].cpu().numpy()
             preds_per_seed.append(q)
@@ -172,6 +200,9 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
         m = evaluate(y_test, q_ens, cfg.model.quantiles)
         results.append(FoldResult(fold=k, test_idx=fold.test_idx, q_pred=q_ens,
                                   per_seed_val_loss=val_losses, metrics=m))
+        if wb is not None:
+            wb.log({f"fold{k}/{name}": v for name, v in m.items()
+                    if np.isfinite(v)} | {f"fold{k}/n_test": len(fold.test_idx)})
         if verbose:
             print(f"  fold {k}: n_test={len(fold.test_idx)} "
                   f"IC={m['rank_ic']:+.3f} hit={m['hit_rate']:.3f} "
@@ -180,8 +211,18 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
 
     pooled_y = np.concatenate([fs.y[main_h][r.test_idx] for r in results])
     pooled_q = np.concatenate([r.q_pred for r in results])
-    return RunResult(
+    out = RunResult(
         fold_results=results,
         summary=aggregate_folds([r.metrics for r in results]),
         pooled=evaluate(pooled_y, pooled_q, cfg.model.quantiles),
     )
+    if wb is not None:
+        for name, (mu, sd) in out.summary.items():
+            if np.isfinite(mu):
+                wb.run.summary[f"{name}_mean"] = mu
+                wb.run.summary[f"{name}_std"] = sd
+        for name, v in out.pooled.items():
+            if np.isfinite(v):
+                wb.run.summary[f"pooled_{name}"] = v
+        wb.finish()
+    return out

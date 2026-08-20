@@ -9,3 +9,11 @@ scikit-learn
 # on HuggingFace (accept terms + `hf auth login` or HF_TOKEN), which is
 # often blocked on managed laptops.
 tabpfn==2.2.1
+
+# Experiment tracking (train.wandb: true). On a locked-down machine set
+# WANDB_MODE=offline and `wandb sync` the run directory later.
+wandb
+
+# Writing syndicate/subgroup columns back into .xlsx deal files
+# (scripts/pull_subgroups.py, scripts/build_bookrunner_features.py)
+openpyxl

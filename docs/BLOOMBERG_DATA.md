@@ -88,18 +88,50 @@ is outperformance vs each deal's own benchmark:
 match `ipos.csv` exactly, and each series must start before that market's
 first IPO.
 
-## 4. All deal types → `deals.csv` (optional, for F3/F4)
+## 4. All deal types → `deals.csv` (optional, for F3)
 
-`date,market,sector,proceeds` covering IPOs **and** follow-ons and
-convertibles — from `NIM <GO>`. Sector must be `tmt` / `healthcare` /
-`other`. This is where your follow-on dataset belongs: it upgrades the supply
-and sector-density factors to the all-deal-types version the factor spec
-calls for. Without the file, F3/F4 fall back to IPOs only.
+`date,market,proceeds` covering IPOs **and** follow-ons and convertibles —
+from `NIM <GO>`. This is where your follow-on dataset belongs: it upgrades
+the supply factor to the all-deal-types version the factor spec calls for.
+Without the file, F3 falls back to IPOs only.
 
 ## 5. GPR → `gpr.csv`
 
 Not Bloomberg: `python scripts\fetch_gpr.py --out data\gpr.csv` (see
 `WINDOWS_QUICKSTART.md` for the manual fallback).
+
+## 6. Industry subgroup + peers → `subgroup` column, `peers.csv`
+
+```powershell
+python scripts\pull_subgroups.py --file data\ipos.csv     # BDP INDUSTRY_SUBGROUP
+python scripts\pull_peers.py --data data --k 8            # peer returns, as-of
+```
+`pull_peers.py` needs `data\peer_universe.csv` (`ticker,subgroup[,market][,market_cap]`)
+exported ONCE from the Terminal — an EQS screen of listed names with their
+subgroup — because the API cannot enumerate subgroup members. Both scripts
+resume where they stopped and also accept your `.xlsx` deal file directly.
+
+## 7. Macro state → `macro.csv`, `macro_global.csv`
+
+```powershell
+python scripts\pull_macro.py --data data ^
+    --vol "HK=VHSI Index,US=VIX Index" --fx "HK=USDHKD Curncy,JP=USDJPY Curncy"
+```
+Globals default to `VIX Index`, `LF98OAS Index` (US HY OAS), `MXEF Index`,
+`MXWD Index` — override on the command line if your desk prefers other
+series. Any market/series you skip simply drops those features.
+
+## 8. Bookrunner syndicate block → columns in `ipos.csv`
+
+```powershell
+python scripts\build_bookrunner_features.py --file data\ipos.csv
+```
+No Bloomberg needed, but it reads `configs\bank_classes.csv` — a
+hand-maintained map of bank → class (bb/global/regional/local) + home
+region. The shipped file is a SEED: review it and add every bank that
+appears in your `bk_*` columns (the script lists unmatched names).
+`prestige_rank_max` is computed inside the pipeline (expanding, pre-pricing
+only) — nothing to pull.
 
 ## Then
 

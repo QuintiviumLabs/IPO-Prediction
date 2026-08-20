@@ -40,9 +40,18 @@ class DataConfig:
     momentum_window_days: int = 90      # ...within this many calendar days
     momentum_extended: bool = True      # add deal count + IQR to the F1 spec
     momentum_horizons: tuple[int, ...] = (1, 5)   # F1/F2 measured at 1d and 1w
-    supply_window_days: int = 90        # F3/F4 rolling window (~3 months)
+    supply_window_days: int = 90        # F3 rolling window (~3 months)
     supply_trailing_days: int = 365     # F3_accel: trailing pace reference
-    sector_30d_days: int = 30           # F4_sec_cnt_30d window (all markets)
+    # Bookrunner prestige (static extra): a bank's share of same-market IPO
+    # proceeds over this trailing window, percentile-ranked among active
+    # banks; the deal gets the max over its bookrunners. Expanding and
+    # strictly pre-pricing, so leakage-safe by construction.
+    prestige_years: int = 3
+    # Market regime (macro block): mean first-day pop of the prior
+    # `regime_pop_window` same-market IPOs, cut into Hot/Neutral/Cold by
+    # EXPANDING terciles of that market's own history. Default definition —
+    # replace the cutoffs if your desk has an official one.
+    regime_pop_window: int = 10
     # GPR window (daily Caldara-Iacoviello GPR index; see scripts/prepare_gpr.py)
     gpr_window: int = 21                # trading days of GPR history for the encoder
     # Bookrunner columns are every column in ipos.csv prefixed with this.
@@ -76,7 +85,11 @@ class SplitConfig:
 class ModelConfig:
     # Arms on/off — this is what the ablation ladder toggles.
     use_momentum: bool = True
-    momentum_groups: tuple[str, ...] = ("f1", "f2", "f3", "f4")
+    # Market-state factor groups fed to the momentum arm:
+    #   f1 recent-deal performance   f2 break rate/depth   f3 rolling supply
+    #   m  macro block (local index state, vol/FX, global risk, regime)
+    #   p1 industry-subgroup peer returns (needs peers.csv)
+    momentum_groups: tuple[str, ...] = ("f1", "f2", "f3", "m", "p1")
     use_gpr: bool = True
     gpr_mode: str = "lstm"          # "level" | "engineered" | "lstm"
     # What the lstm-mode GPR arm consumes: raw standardized "level"s, or
@@ -115,6 +128,11 @@ class TrainConfig:
     # toward the moonshot tail — and back-mapped intervals inherit the
     # empirical tails. Evaluation stays in raw return space either way.
     label_transform: str = "none"
+    # Weights & Biases logging (optional; wandb must be installed).
+    # Logs per-epoch validation loss, per-fold metrics and the run summary.
+    # On a locked-down machine set WANDB_MODE=offline and sync later.
+    wandb: bool = False
+    wandb_project: str = "ipo-model"
     lr: float = 1e-3
     weight_decay: float = 1e-4
     batch_size: int = 128

@@ -65,7 +65,10 @@ def test_film_starts_at_identity():
 def test_momentum_group_subsetting(fs, cfg):
     """momentum_columns must slice exactly the requested factor groups."""
     f1 = fs.momentum_columns(("f1",))
-    all_groups = fs.momentum_columns(("f1", "f2", "f3", "f4"))
+    all_groups = fs.momentum_columns(("f1", "f2", "f3", "m", "p1"))
     n_f1 = sum(1 for n in fs.momentum_names if n.startswith("f1_"))
     assert f1.shape == (len(fs), n_f1)
     assert all_groups.shape == (len(fs), len(fs.momentum_names))
+    m_only = fs.momentum_columns(("m",))
+    assert m_only.shape[1] == sum(1 for n in fs.momentum_names
+                                  if n.startswith("m_"))

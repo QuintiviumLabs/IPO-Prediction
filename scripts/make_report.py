@@ -314,11 +314,14 @@ def _friendly(name: str) -> str:
         return FRIENDLY[name]
     s = name
     for a, b in (("f1_", "Recent IPO perf: "), ("f2_", "Break rate: "),
-                 ("f3_", "Issuance supply: "), ("f4_", "Sector issuance: "),
+                 ("f3_", "Issuance supply: "), ("m_", "Macro: "),
+                 ("p1_", "Sector peers: "), ("archetype_", "Syndicate type: "),
                  ("gpr_", "Geopolitical risk: "), ("market=", "Market "),
                  ("sector=", "Sector "), ("momentum=", "Momentum "),
                  ("gpr=", "Risk environment ")):
-        s = s.replace(a, b)
+        if s.startswith(a):     # prefixes only — "m_" must not hit "geo_mom_"
+            s = b + s[len(a):]
+            break
     return s.replace("_", " ")
 
 
