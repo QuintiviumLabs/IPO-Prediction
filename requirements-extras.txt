@@ -17,3 +17,7 @@ wandb
 # Writing syndicate/subgroup columns back into .xlsx deal files
 # (scripts/pull_subgroups.py, scripts/build_bookrunner_features.py)
 openpyxl
+
+# LLM-assisted bank classification (scripts/fill_bank_classes_llm.py);
+# needs OPENAI_API_KEY at runtime
+openai
