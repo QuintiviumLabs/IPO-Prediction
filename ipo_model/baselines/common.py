@@ -16,7 +16,7 @@ from ipo_model.data.features import FeatureSet
 from ipo_model.data.preprocess import FoldScaler, engineered_table, raw_table
 from ipo_model.data.splits import purged_walk_forward
 from ipo_model.training.loop import FoldResult, RunResult
-from ipo_model.training.metrics import aggregate_folds, evaluate
+from ipo_model.training.metrics import aggregate_folds, evaluate, evaluate_binary
 
 # (X_train, y_train, X_val, y_val, X_test, quantiles, mid_index) -> (n_test, Q)
 QuantilePredictor = Callable[
@@ -66,10 +66,15 @@ def sample_configs(space: dict, n: int, seed: int = 0) -> list[dict]:
 
 def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
               features: str = "engineered", verbose: bool = True) -> RunResult:
+    """head='quantile': the predictor returns an (n_test, Q) quantile matrix.
+    head='binary': the predictor returns an (n_test, 1) probability of
+    outperformance (it still receives the CONTINUOUS y and derives y > 0
+    itself, so it can also use magnitudes for tuning if it wants)."""
+    binary = cfg.model.head == "binary"
     table_fn = TABLES[features]
     folds = purged_walk_forward(fs.dates, fs.label_end, cfg.split)
     y = fs.y[cfg.main_horizon]
-    qs = sorted(cfg.model.quantiles)
+    qs = [0.5] if binary else sorted(cfg.model.quantiles)
     mid = qs.index(0.5)
     results: list[FoldResult] = []
 
@@ -81,12 +86,20 @@ def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
             X.iloc[fold.val_idx], y[fold.val_idx],
             X.iloc[fold.test_idx], qs, mid,
         )
-        q_pred = np.sort(q_pred, axis=1)  # enforce monotone quantiles
+        q_pred = np.atleast_2d(np.asarray(q_pred, float))
+        if not binary:
+            q_pred = np.sort(q_pred, axis=1)  # enforce monotone quantiles
 
-        m = evaluate(y[fold.test_idx], q_pred, cfg.model.quantiles)
+        m = (evaluate_binary(y[fold.test_idx], q_pred[:, 0]) if binary
+             else evaluate(y[fold.test_idx], q_pred, cfg.model.quantiles))
         results.append(FoldResult(fold=k, test_idx=fold.test_idx, q_pred=q_pred,
                                   per_seed_val_loss=[], metrics=m))
-        if verbose:
+        if verbose and binary:
+            print(f"  fold {k}: n_test={len(fold.test_idx)} "
+                  f"IC={m['rank_ic']:+.3f} AUC={m['auc']:.3f} "
+                  f"acc={m['accuracy']:.3f} brier={m['brier']:.4f} "
+                  f"base={m['base_rate']:.2f}")
+        elif verbose:
             print(f"  fold {k}: n_test={len(fold.test_idx)} "
                   f"IC={m['rank_ic']:+.3f} hit={m['hit_rate']:.3f} "
                   f"spread={m['decile_spread']:+.4f} MAE={m['mae']:.4f} "
@@ -97,5 +110,6 @@ def run_folds(cfg: Config, fs: FeatureSet, predict_quantiles: QuantilePredictor,
     return RunResult(
         fold_results=results,
         summary=aggregate_folds([r.metrics for r in results]),
-        pooled=evaluate(pooled_y, pooled_q, cfg.model.quantiles),
+        pooled=(evaluate_binary(pooled_y, pooled_q[:, 0]) if binary
+                else evaluate(pooled_y, pooled_q, cfg.model.quantiles)),
     )

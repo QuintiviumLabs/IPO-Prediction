@@ -16,8 +16,8 @@ from ipo_model.data.features import FeatureSet
 from ipo_model.data.preprocess import FoldScaler
 from ipo_model.data.splits import Fold, purged_walk_forward
 from ipo_model.models.model import ThreeArmModel
-from ipo_model.training.losses import multi_horizon_loss
-from ipo_model.training.metrics import aggregate_folds, evaluate
+from ipo_model.training.losses import binary_multi_horizon_loss, multi_horizon_loss
+from ipo_model.training.metrics import aggregate_folds, evaluate, evaluate_binary
 
 
 @dataclass
@@ -98,6 +98,30 @@ def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
     y_train = {h: t[fold.train_idx] for h, t in targets.items()}
     y_val = {h: t[fold.val_idx] for h, t in targets.items()}
 
+    binary = cfg.model.head == "binary"
+    pos_weight = None
+    if binary and cfg.train.class_weight == "balanced":
+        # Class weights from the TRAINING fold: a pop-heavy base rate cannot
+        # be gamed by always predicting "outperform". (Probabilities then
+        # centre on 0.5 rather than the base rate; ranking is unaffected.)
+        pos_weight = {}
+        for h, t in y_train.items():
+            pos = float(t.sum())
+            neg = float(len(t) - pos)
+            pw = neg / pos if pos > 0 else 1.0
+            pos_weight[h] = torch.tensor(pw, device=device)
+    elif binary and cfg.train.class_weight != "none":
+        raise ValueError(f"Unknown class_weight: {cfg.train.class_weight!r} "
+                         "(expected 'balanced' or 'none')")
+
+    def _loss(preds, ys):
+        if binary:
+            return binary_multi_horizon_loss(
+                preds, ys, cfg.main_horizon, cfg.model.aux_weight, pos_weight)
+        return multi_horizon_loss(
+            preds, ys, cfg.model.quantiles, cfg.main_horizon,
+            cfg.model.aux_weight)
+
     n = len(fold.train_idx)
     best_val, best_state, patience_left = float("inf"), None, cfg.train.patience
     for _epoch in range(cfg.train.max_epochs):
@@ -107,12 +131,11 @@ def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
             b = perm[start: start + cfg.train.batch_size]
             bt = torch.as_tensor(b, dtype=torch.long, device=device)
             preds = model({k: v[bt] for k, v in train_t.items()})
-            loss = multi_horizon_loss(
-                preds, {h: y[bt] for h, y in y_train.items()},
-                cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
-            )
+            loss = _loss(preds, {h: y[bt] for h, y in y_train.items()})
             if cfg.model.l1_input > 0:  # structured feature pruning
                 loss = loss + cfg.model.l1_input * model.input_l1()
+            if cfg.model.l1_static > 0:  # sector/bookrunner containment
+                loss = loss + cfg.model.l1_static * model.static_l1()
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
@@ -120,10 +143,7 @@ def train_one(cfg: Config, tensors: dict[str, torch.Tensor],
 
         model.eval()
         with torch.no_grad():
-            val_loss = float(multi_horizon_loss(
-                model(val_t), y_val,
-                cfg.model.quantiles, cfg.main_horizon, cfg.model.aux_weight,
-            ))
+            val_loss = float(_loss(model(val_t), y_val))
         if epoch_log is not None:
             epoch_log(_epoch, val_loss)
         if val_loss < best_val - 1e-6:
@@ -153,6 +173,13 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
         wb.init(project=cfg.train.wandb_project, config=_dc.asdict(cfg),
                 reinit=True)
 
+    binary = cfg.model.head == "binary"
+    if binary and cfg.train.label_transform != "none":
+        raise ValueError(
+            "label_transform has no meaning with head='binary' — the label "
+            "is sign(y), which any monotone transform leaves unchanged. "
+            "Set train.label_transform: none.")
+
     for k, fold in enumerate(folds):
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
         tensors = _tensors(fs, scaler, cfg, device)
@@ -160,7 +187,11 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
         # train in Gaussian-score space (outlier magnitudes cannot pull the
         # body), back-map predictions to return space before evaluation.
         transform = None
-        if cfg.train.label_transform == "normal_score":
+        if binary:
+            targets = {h: torch.tensor((y > 0).astype(np.float32),
+                                       device=device)
+                       for h, y in fs.y.items()}
+        elif cfg.train.label_transform == "normal_score":
             from ipo_model.training.transforms import NormalScore
             transform = {h: NormalScore().fit(y[fold.train_idx])
                          for h, y in fs.y.items()}
@@ -182,11 +213,16 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
             model, val_loss = train_one(cfg, tensors, targets, fold, seed,
                                         epoch_log=cb)
             with torch.no_grad():
-                q = model(_slice(tensors, fold.test_idx))[main_h].cpu().numpy()
+                out_t = model(_slice(tensors, fold.test_idx))[main_h]
+                if binary:
+                    out_t = torch.sigmoid(out_t)   # ensemble probabilities
+                q = out_t.cpu().numpy()
             preds_per_seed.append(q)
             val_losses.append(val_loss)
 
         q_ens = np.mean(preds_per_seed, axis=0)  # score space if transformed
+        if q_ens.ndim == 1:
+            q_ens = q_ens[:, None]
         if transform is not None:
             q_ens = transform[main_h].inverse(q_ens)  # monotone -> no crossing
         y_test = fs.y[main_h][fold.test_idx]
@@ -197,13 +233,25 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
             dead = [n for n, v in zip(names, norms) if v < 0.02 * norms.max()]
             print(f"    l1_input pruned {len(dead)}/{len(names)} momentum "
                   f"features{': ' + ', '.join(dead) if dead else ''}")
-        m = evaluate(y_test, q_ens, cfg.model.quantiles)
+        if cfg.model.l1_static > 0 and verbose:
+            bk_norms = model.bookrunner_embed_norms()  # last seed's model
+            if bk_norms is not None and len(bk_norms) and bk_norms.max() > 0:
+                dead_bk = int((bk_norms < 0.02 * bk_norms.max()).sum())
+                print(f"    l1_static zeroed {dead_bk}/{len(bk_norms)} "
+                      f"bookrunner embedding columns")
+        m = (evaluate_binary(y_test, q_ens[:, 0]) if binary
+             else evaluate(y_test, q_ens, cfg.model.quantiles))
         results.append(FoldResult(fold=k, test_idx=fold.test_idx, q_pred=q_ens,
                                   per_seed_val_loss=val_losses, metrics=m))
         if wb is not None:
             wb.log({f"fold{k}/{name}": v for name, v in m.items()
                     if np.isfinite(v)} | {f"fold{k}/n_test": len(fold.test_idx)})
-        if verbose:
+        if verbose and binary:
+            print(f"  fold {k}: n_test={len(fold.test_idx)} "
+                  f"IC={m['rank_ic']:+.3f} AUC={m['auc']:.3f} "
+                  f"acc={m['accuracy']:.3f} brier={m['brier']:.4f} "
+                  f"base={m['base_rate']:.2f}")
+        elif verbose:
             print(f"  fold {k}: n_test={len(fold.test_idx)} "
                   f"IC={m['rank_ic']:+.3f} hit={m['hit_rate']:.3f} "
                   f"spread={m['decile_spread']:+.4f} MAE={m['mae']:.4f} "
@@ -214,7 +262,8 @@ def run(cfg: Config, fs: FeatureSet, verbose: bool = True) -> RunResult:
     out = RunResult(
         fold_results=results,
         summary=aggregate_folds([r.metrics for r in results]),
-        pooled=evaluate(pooled_y, pooled_q, cfg.model.quantiles),
+        pooled=(evaluate_binary(pooled_y, pooled_q[:, 0]) if binary
+                else evaluate(pooled_y, pooled_q, cfg.model.quantiles)),
     )
     if wb is not None:
         for name, (mu, sd) in out.summary.items():

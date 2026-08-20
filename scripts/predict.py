@@ -49,30 +49,41 @@ def main() -> None:
 
     preds = bundle.predict(fs, idx=idx)
     q = preds[main_h]
-    levels = cfg.model.quantiles
 
     rows = {
         "ipo_id": fs.ids[idx],
         "first_trade_date": pd.to_datetime(fs.dates[idx]).strftime("%Y-%m-%d"),
         "market": [fs.market_names[j] for j in fs.market_onehot[idx].argmax(1)],
     }
-    for qi, lv in enumerate(levels):
-        rows[f"q{int(round(lv * 100))}"] = q[:, qi]
-    for qi, lv in enumerate(levels):
-        rows[f"mult_q{int(round(lv * 100))}"] = np.exp(q[:, qi])
+    binary = cfg.model.head == "binary"
+    if binary:
+        for h in sorted(preds):
+            rows[f"p_out_{h}d"] = preds[h][:, 0]
+    else:
+        levels = cfg.model.quantiles
+        for qi, lv in enumerate(levels):
+            rows[f"q{int(round(lv * 100))}"] = q[:, qi]
+        for qi, lv in enumerate(levels):
+            rows[f"mult_q{int(round(lv * 100))}"] = np.exp(q[:, qi])
     df = pd.DataFrame(rows)
 
-    med = len(levels) // 2
     print(f"Bundle: {args.bundle} (trained on {bundle.meta['n_train_rows']} deals, "
           f"{bundle.meta['train_date_range'][0]} .. {bundle.meta['train_date_range'][1]})")
-    print(f"Main horizon {main_h}d; median forecast is the outperformance "
-          f"multiple vs the deal's own benchmark.\n")
+    if binary:
+        print(f"p_out_{main_h}d = P(the deal outperforms its own market's "
+              f"benchmark over {main_h} trading days); shorter horizons "
+              "are the auxiliary heads.\n")
+    else:
+        print(f"Main horizon {main_h}d; median forecast is the outperformance "
+              f"multiple vs the deal's own benchmark.\n")
     with pd.option_context("display.width", 140, "display.max_rows", 50):
         print(df.round(4).to_string(index=False))
-    lo, hi = int(round(levels[0] * 100)), int(round(levels[-1] * 100))
-    print(f"\nRead q50 as the central call; [q{lo}, q{hi}] is the raw model "
-          f"band — apply scripts/calibrate_intervals.py factors for "
-          f"honest coverage.")
+    if not binary:
+        levels = cfg.model.quantiles
+        lo, hi = int(round(levels[0] * 100)), int(round(levels[-1] * 100))
+        print(f"\nRead q50 as the central call; [q{lo}, q{hi}] is the raw model "
+              f"band — apply scripts/calibrate_intervals.py factors for "
+              f"honest coverage.")
 
     if args.out:
         df.to_csv(args.out, index=False)

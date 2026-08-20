@@ -37,6 +37,36 @@ def run(cfg: Config, fs: FeatureSet, seed: int = 0, features: str = "engineered"
                                           verbose=False)],
         )
 
+    def predict_binary(X_train: pd.DataFrame, y_train: np.ndarray,
+                       X_val: pd.DataFrame, y_val: np.ndarray,
+                       X_test: pd.DataFrame, qs: list[float],
+                       mid: int) -> np.ndarray:
+        """Binary head: same engine, objective='binary', probability out."""
+        lt, lv = (y_train > 0).astype(float), (y_val > 0).astype(float)
+        base = dict(cfg.lgbm.params, seed=seed, objective="binary",
+                    metric="binary_logloss")
+        base.pop("alpha", None)
+        base.pop("huber_slope", None)
+        if cfg.train.class_weight == "balanced":
+            base["is_unbalance"] = True   # pop-heavy base rate
+        if tune:
+            best_err, best = np.inf, base
+            for cand in sample_configs(LGBM_SPACE, tune, seed=seed):
+                params = dict(base, **cand)
+                b = _fit(params, X_train, lt, X_val, lv)
+                p = b.predict(X_val, num_iteration=b.best_iteration)
+                p = np.clip(p, 1e-7, 1 - 1e-7)
+                err = float(-(lv * np.log(p) + (1 - lv) * np.log(1 - p)).mean())
+                if err < best_err:
+                    best_err, best = err, params
+            base = best
+            if verbose:
+                shown = {k: base[k] for k in LGBM_SPACE if k in base}
+                print(f"    tuned ({tune} configs) val logloss={best_err:.4f}: {shown}")
+        booster = _fit(base, X_train, lt, X_val, lv)
+        return booster.predict(X_test,
+                               num_iteration=booster.best_iteration)[:, None]
+
     def predict_quantiles(X_train: pd.DataFrame, y_train: np.ndarray,
                           X_val: pd.DataFrame, y_val: np.ndarray,
                           X_test: pd.DataFrame, qs: list[float],
@@ -65,4 +95,6 @@ def run(cfg: Config, fs: FeatureSet, seed: int = 0, features: str = "engineered"
             q_pred[:, qi] = booster.predict(X_test, num_iteration=booster.best_iteration)
         return q_pred
 
-    return run_folds(cfg, fs, predict_quantiles, features=features, verbose=verbose)
+    predictor = (predict_binary if cfg.model.head == "binary"
+                 else predict_quantiles)
+    return run_folds(cfg, fs, predictor, features=features, verbose=verbose)

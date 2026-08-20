@@ -64,6 +64,9 @@ EXTRA_RUNGS: dict[str, tuple[str, dict[str, Any]]] = {
 }
 
 REPORT_METRICS = ["rank_ic", "hit_rate", "decile_spread", "mae", "pinball", "coverage"]
+# Binary head: probability-quality metrics replace the interval ones.
+REPORT_METRICS_BINARY = ["rank_ic", "auc", "accuracy", "quintile_spread",
+                         "brier", "logloss"]
 
 
 def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
@@ -81,10 +84,16 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
         "00_naive_const": {"strategy": "constant"},
         "00_naive_f1": {"strategy": "feature", "feature": naive.DEFAULT_FEATURE},
     }
+    report_metrics = (REPORT_METRICS_BINARY if cfg.model.head == "binary"
+                      else REPORT_METRICS)
     names = (rungs if rungs is not None
              else [*naive_rungs, *tree_rungs, *RUNGS.keys()])
     rows = []
     for name in names:
+        if name in EXTRA_RUNGS and cfg.model.head == "binary":
+            raise ValueError(
+                f"rung {name} supports head='quantile' only — run it with "
+                "model.head: quantile in the config")
         if verbose:
             print(f"\n=== {name} ===")
         if name in naive_rungs:
@@ -107,11 +116,11 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
         else:
             res = loop.run(cfg.override(**RUNGS[name]), fs, verbose=verbose)
         row: dict[str, Any] = {"rung": name}
-        for m in REPORT_METRICS:
-            mean, std = res.summary[m]
+        for m in report_metrics:
+            mean, std = res.summary.get(m, (float("nan"), float("nan")))
             row[m] = mean
             row[f"{m}_std"] = std
-            row[f"{m}_pooled"] = res.pooled[m]
+            row[f"{m}_pooled"] = res.pooled.get(m, float("nan"))
         # Significance of the pooled IC, from the period-by-period IC series.
         row.update(_ic_significance(cfg, fs, res))
         rows.append(row)
@@ -124,7 +133,7 @@ def run_ladder(cfg: Config, fs: FeatureSet, rungs: list[str] | None = None,
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / "ablations.csv")
-    _write_markdown(df, out / "ablations.md")
+    _write_markdown(df, out / "ablations.md", report_metrics)
     if verbose:
         print(f"\nPer-deal predictions saved to {out}/predictions/ — analyse with:"
               f"\n  python scripts/analyze_results.py --results {out}")
@@ -144,15 +153,17 @@ def _ic_significance(cfg: Config, fs: FeatureSet, res: RunResult) -> dict[str, f
     return {"ic_periods": t["n"], "ic_t": t["t"], "ic_p": t["p"]}
 
 
-def _write_markdown(df: pd.DataFrame, path: Path) -> None:
+def _write_markdown(df: pd.DataFrame, path: Path,
+                    report_metrics: list[str] | None = None) -> None:
+    metrics = report_metrics or REPORT_METRICS
     lines = ["# Ablation results", "",
              "Mean ± std across purged walk-forward folds "
              "(pooled OOS value in parentheses).", ""]
-    header = "| rung | " + " | ".join(REPORT_METRICS) + " |"
-    lines += [header, "|" + "---|" * (len(REPORT_METRICS) + 1)]
+    header = "| rung | " + " | ".join(metrics) + " |"
+    lines += [header, "|" + "---|" * (len(metrics) + 1)]
     for rung, r in df.iterrows():
         cells = [f"{r[m]:+.4f} ± {r[f'{m}_std']:.4f} ({r[f'{m}_pooled']:+.4f})"
-                 for m in REPORT_METRICS]
+                 for m in metrics]
         lines.append(f"| {rung} | " + " | ".join(cells) + " |")
 
     if "ic_t" in df.columns:

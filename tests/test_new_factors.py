@@ -17,10 +17,12 @@ def test_f4_removed(fs):
 
 def test_macro_block_present_and_sane(fs):
     for n in ["m_geo_mom_63d", "m_geo_dd_252", "m_geo_rvol_21d",
-              "m_gpr_mean63", "m_gpr_vol63", "m_regime_hot", "m_regime_cold",
+              "m_gpr_vol63", "m_regime_hot", "m_regime_cold",
               "m_vol_index_z", "m_fx_ret_21d", "m_vix_z", "m_vix_chg_21d",
               "m_hy_oas_z", "m_em_vs_dm_63d"]:
         assert n in fs.momentum_names, n
+    # the GPR level/mean is deliberately NOT an input (the GPR arm covers it)
+    assert "m_gpr_mean63" not in fs.momentum_names
     assert np.isfinite(fs.momentum).all()
     # drawdown is <= 0 by construction; regime flags are exclusive binaries
     assert (_col(fs, "m_geo_dd_252") <= 1e-9).all()

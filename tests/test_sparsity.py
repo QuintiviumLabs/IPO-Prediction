@@ -25,6 +25,9 @@ def _model(cfg, batch):
 
 
 def _train(cfg, steps=300, seed=0):
+    # This test exercises the QUANTILE loss path; the group-lasso mechanics
+    # are head-independent.
+    cfg = cfg.override(**{"model.head": "quantile"})
     torch.manual_seed(seed)
     batch = _batch(seed=seed)
     # Real signal in momentum columns 0 and 1; columns 2..19 are pure noise.

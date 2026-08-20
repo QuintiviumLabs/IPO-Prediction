@@ -83,6 +83,29 @@ class SplitConfig:
 
 @dataclass
 class ModelConfig:
+    # Output head.
+    #   "binary"    one logit per horizon: P(outperform the benchmark), i.e.
+    #               P(y_h > 0). Trained with class-weighted BCE. The ground
+    #               truth's MAGNITUDE never enters the loss, so moonshots
+    #               cannot dominate and there are far fewer output parameters
+    #               to fit — the right shape when the continuous target is
+    #               noisy at N ~ 1k.
+    #   "quantile"  the original q10/50/90 pinball heads (kept for ablations
+    #               and interval work; calibrate_intervals.py needs this).
+    head: str = "binary"
+    # Anti-overfitting on the static block (sector flags + bookrunner
+    # identity stay as INPUTS; these control how hard the model may lean on
+    # them):
+    #   static_input_dropout  randomly zeroes static inputs (sector flags,
+    #                         syndicate extras, individual banks in the
+    #                         multi-hot) during training, so no single flag
+    #                         or bank can become a memorized shortcut.
+    #   l1_static             group-lasso on the static arm's first-layer
+    #                         columns AND on each bank's embedding column —
+    #                         banks/flags that don't earn their keep are
+    #                         driven to exactly zero. Stacks with l1_input.
+    static_input_dropout: float = 0.2
+    l1_static: float = 1e-3
     # Arms on/off — this is what the ablation ladder toggles.
     use_momentum: bool = True
     # Market-state factor groups fed to the momentum arm:
@@ -128,6 +151,13 @@ class TrainConfig:
     # toward the moonshot tail — and back-mapped intervals inherit the
     # empirical tails. Evaluation stays in raw return space either way.
     label_transform: str = "none"
+    # Binary head only. "balanced": weight the positive class by n_neg/n_pos
+    # of the training fold, so a pop-heavy base rate can't be gamed by always
+    # predicting "outperform" — but probabilities then centre on 0.5 instead
+    # of the raw base rate (ranking/AUC unaffected; don't read p>0.5 as a
+    # literal majority call). "none": raw BCE; probabilities track the base
+    # rate but the model may lean lazily toward the majority class.
+    class_weight: str = "balanced"
     # Weights & Biases logging (optional; wandb must be installed).
     # Logs per-epoch validation loss, per-fold metrics and the run summary.
     # On a locked-down machine set WANDB_MODE=offline and sync later.

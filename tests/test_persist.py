@@ -34,12 +34,21 @@ def test_roundtrip_identical_predictions(bundle, bundle_dir, fs):
         assert np.allclose(p1[h], p2[h], atol=1e-6)
 
 
-def test_predict_shape_and_monotone(bundle, fs, fast_cfg):
+def test_predict_shape_binary(bundle, fs, fast_cfg):
     preds = bundle.predict(fs)
     h = fast_cfg.main_horizon
-    assert preds[h].shape == (len(fs), len(fast_cfg.model.quantiles))
-    assert (np.diff(preds[h], axis=1) >= -1e-6).all()
+    assert preds[h].shape == (len(fs), 1)      # P(outperform)
     assert np.isfinite(preds[h]).all()
+    assert (preds[h] >= 0).all() and (preds[h] <= 1).all()
+
+
+def test_quantile_bundle_roundtrip(fast_cfg, fs, tmp_path):
+    qcfg = fast_cfg.override(**{"model.head": "quantile"})
+    b = fit_final(qcfg, fs, tmp_path / "qb", verbose=False)
+    preds = b.predict(fs)
+    h = qcfg.main_horizon
+    assert preds[h].shape == (len(fs), len(qcfg.model.quantiles))
+    assert (np.diff(preds[h], axis=1) >= -1e-6).all()
 
 
 def test_subset_prediction_matches(bundle, fs):
@@ -69,6 +78,6 @@ def test_new_ipo_scored_without_prices(bundle, small_data, fast_cfg):
     k = list(fs_inf.ids).index("ipo_tomorrow")
     preds = bundle.predict(fs_inf, idx=np.array([k]))
     h = fast_cfg.main_horizon
-    assert preds[h].shape == (1, len(fast_cfg.model.quantiles))
+    assert preds[h].shape == (1, 1)
     assert np.isfinite(preds[h]).all()
-    assert (np.diff(preds[h], axis=1) >= -1e-6).all()
+    assert (preds[h] >= 0).all() and (preds[h] <= 1).all()

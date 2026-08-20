@@ -5,7 +5,7 @@
                  -> z_static
   MOMENTUM ARM   the engineered market-state block (F1 recent-deal
                  performance, F2 break rate/depth, F3 rolling supply,
-                 F4 sector issuance density) -> small MLP -> z_mom
+                 macro state, subgroup peers) -> small MLP -> z_mom
   GPR ARM        "level" (last value), "engineered" (5 summaries -> MLP),
                  or "lstm" (GRU over the daily window) -> z_gpr
   GATING         optional FiLM: z_gpr modulates BOTH z_static and z_mom
@@ -13,10 +13,13 @@
                  identity) — "the geopolitical regime decides how much deal
                  quality and market momentum matter".
   FUSION         concat -> MLP -> shared representation -> per-horizon
-                 quantile heads (1d / 3d / 1w / 1m). Each head predicts the
-                 median directly and the 10th/90th percentiles as median -/+
-                 softplus offsets, so quantiles can never cross. The median
-                 of the main horizon is the point forecast.
+                 heads (1d / 3d / 1w / 1m):
+                   head="binary"   one logit per horizon — P(outperform the
+                                   benchmark). The default: magnitude noise
+                                   and moonshots never enter the loss.
+                   head="quantile" median + softplus offsets -> non-crossing
+                                   (q10, q50, q90), pinball loss.
+  The main horizon's output is the forecast; shorter horizons regularize.
 """
 from __future__ import annotations
 
@@ -42,20 +45,25 @@ class StaticArm(nn.Module):
         emb_dim = cfg.bookrunner_emb_dim if self.has_bk else 0
         if self.has_bk:
             self.bk_embed = nn.Linear(n_bookrunners, emb_dim, bias=False)
+        # Input dropout: at train time, sector flags / syndicate extras /
+        # individual banks in the multi-hot randomly vanish, so the model
+        # cannot memorize "this flag or this bank => big pop" shortcuts.
+        self.in_drop = nn.Dropout(cfg.static_input_dropout)
         self.net = mlp([n_binary + emb_dim, cfg.static_hidden, cfg.static_out],
                        cfg.dropout, out_act=True)
 
     def forward(self, binary: torch.Tensor, bk: torch.Tensor) -> torch.Tensor:
-        parts = [binary]
+        parts = [self.in_drop(binary)]
         if self.has_bk:
             # Mean-of-embeddings over the deal's bookrunners (multi-hot bag).
+            bk = self.in_drop(bk)
             emb = self.bk_embed(bk) / bk.sum(dim=1, keepdim=True).clamp(min=1.0)
             parts.append(emb)
         return self.net(torch.cat(parts, dim=1))
 
 
 class MomentumArm(nn.Module):
-    """Encodes the engineered F1-F4 market-state block."""
+    """Encodes the engineered market-state factor block."""
 
     def __init__(self, n_features: int, cfg: ModelConfig):
         super().__init__()
@@ -154,9 +162,18 @@ class ThreeArmModel(nn.Module):
 
         dims = [fusion_in, *cfg.fusion_hidden]
         self.fusion = mlp(dims, cfg.dropout, out_act=True)
-        self.heads = nn.ModuleDict({
-            str(h): QuantileHead(dims[-1], cfg.quantiles) for h in horizons
-        })
+        if cfg.head == "binary":
+            # One logit per horizon: P(outperform). (B, 1) per head.
+            self.heads = nn.ModuleDict({
+                str(h): nn.Linear(dims[-1], 1) for h in horizons
+            })
+        elif cfg.head == "quantile":
+            self.heads = nn.ModuleDict({
+                str(h): QuantileHead(dims[-1], cfg.quantiles) for h in horizons
+            })
+        else:
+            raise ValueError(f"Unknown head: {cfg.head!r} "
+                             "(expected 'binary' or 'quantile')")
 
     def forward(self, batch: dict[str, torch.Tensor]) -> dict[int, torch.Tensor]:
         z_static = self.static_arm(batch["static_binary"], batch["static_bk"])
@@ -194,6 +211,25 @@ class ThreeArmModel(nn.Module):
         for lin in self._input_layers():
             pen = pen + lin.weight.norm(dim=0).sum()
         return pen
+
+    def static_l1(self) -> torch.Tensor:
+        """Group-lasso restricted to the static block: the static arm's
+        first-layer input columns (sector flags, n_banks, syndicate extras)
+        plus each BANK's embedding column. Under this penalty a bank or flag
+        that doesn't reduce loss is zeroed outright — targeted containment of
+        sector/bookrunner overfitting without removing the inputs."""
+        pen = self.static_arm.net[0].weight.norm(dim=0).sum()
+        if self.static_arm.has_bk:
+            pen = pen + self.static_arm.bk_embed.weight.norm(dim=0).sum()
+        return pen
+
+    def bookrunner_embed_norms(self) -> "np.ndarray | None":
+        """Per-bank embedding column norms (for prune reports)."""
+        if not self.static_arm.has_bk:
+            return None
+        import numpy as np
+        return (self.static_arm.bk_embed.weight.norm(dim=0)
+                .detach().cpu().numpy())
 
     def momentum_input_norms(self) -> "np.ndarray | None":
         """Per-momentum-feature first-layer column norms (for prune reports)."""

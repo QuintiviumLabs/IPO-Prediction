@@ -36,8 +36,9 @@ sources, with gradient-boosted baselines the deep model has to beat:
     (90d) and issuance acceleration vs the trailing year — as
     expanding-window market-specific z-scores.
   - **M · Macro block**: local benchmark state (63d momentum, 252d drawdown,
-    21d realized vol), GPR level/vol (63d), and — when the optional macro
-    files exist — local vol index z-score and 21d FX move (`macro.csv`),
+    21d realized vol), GPR volatility (63d SD of daily changes, annualized —
+    the level itself is deliberately not an input), and — when the optional
+    macro files exist — local vol index z-score and 21d FX move (`macro.csv`),
     global VIX z/change, HY OAS z, EM-vs-DM relative momentum
     (`macro_global.csv`), plus a Hot/Neutral/Cold issuance regime: mean
     first-day pop of the prior 10 same-market IPOs, cut by expanding
@@ -53,11 +54,22 @@ sources, with gradient-boosted baselines the deep model has to beat:
   representation ablation). `scripts/prepare_gpr.py` converts the downloaded
   file into the expected `gpr.csv`.
 
-Fused by a small MLP into per-horizon **quantile heads** (10/50/90, pinball
-loss, structurally non-crossing) at **1d / 3d / 1w / 1m** (trading days) —
-the 1-month head is the target, shorter horizons are auxiliary regularizers.
-Optional **FiLM gating** (V2) lets the GPR representation modulate the static
-and momentum representations.
+Fused by a small MLP into per-horizon heads at **1d / 3d / 1w / 1m** (trading
+days) — the 1-month head is the target, shorter horizons are auxiliary
+regularizers. The default output (`model.head: binary`) is **P(outperform
+the benchmark)** per horizon — class-weighted BCE on sign(y), so the noisy
+magnitude of the continuous target and its moonshot tail never enter the
+loss. `model.head: quantile` restores the original q10/50/90 pinball heads
+(needed for interval work / CQR). Optional **FiLM gating** (V2) lets the GPR
+representation modulate the static and momentum representations.
+
+**Sector/bookrunner overfitting containment** (both stay as inputs):
+`model.static_input_dropout` randomly masks static inputs — sector flags,
+syndicate extras, individual banks — during training so no single flag can
+become a memorized shortcut, and `model.l1_static` puts a group-lasso on the
+static arm's input columns and each bank's embedding column, zeroing
+banks/flags that don't earn their keep (reported per fold). Both are on by
+default (0.2 / 1e-3).
 
 ## Target definition
 
@@ -86,12 +98,17 @@ row's past by construction — verified by a prefix-stability test.
 
 **Metrics** (`ipo_model/training/metrics.py`). Ordering — Spearman rank IC
 (with p-value), Pearson IC, decile/quintile spread, top and bottom bucket
-means, hit rate. Level — MAE, median AE, RMSE, bias, and an OOS R² against
-the natural null of predicting zero outperformance. Distribution — pinball
-loss, interval coverage vs nominal, which tail is missing
-(`frac_below_lo` / `frac_above_hi`), mean interval width, and the Winkler
-interval score. For a cross-sectional signal, rank IC and bucket spread are
-the ones that decide.
+means, hit rate. Level (quantile head) — MAE, median AE, RMSE, bias, and an
+OOS R² against the natural null of predicting zero outperformance.
+Distribution (quantile head) — pinball loss, interval coverage vs nominal,
+which tail is missing (`frac_below_lo` / `frac_above_hi`), mean interval
+width, and the Winkler interval score. Classification (binary head) — AUC,
+Brier score and Brier skill vs the base rate, log loss, accuracy at 0.5,
+base rate. Rank metrics are computed against the CONTINUOUS outcome under
+both heads, so binary and quantile runs stay directly comparable on rank IC
+and bucket spread — the numbers that decide. Note: with
+`train.class_weight: balanced`, probabilities centre on 0.5 rather than the
+raw base rate, so read p as a ranking score, not a literal frequency.
 
 **Significance.** A point estimate without an error bar is not a result at
 this sample size, so the pipeline ships the machinery to test every number:

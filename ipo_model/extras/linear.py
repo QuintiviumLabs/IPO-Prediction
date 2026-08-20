@@ -64,6 +64,9 @@ def run(cfg: Config, fs: FeatureSet, model: str = "ridge",
         quantile_method: str = "residual", alphas: tuple[float, ...] = DEFAULT_ALPHAS,
         features: str = "engineered", verbose: bool = True) -> RunResult:
     _require_sklearn()
+    if cfg.model.head == "binary":
+        raise ValueError("the linear rungs are interval models — run them "
+                         "with model.head: quantile")
     if quantile_method not in ("residual", "quantreg"):
         raise ValueError("quantile_method must be 'residual' or 'quantreg'")
 

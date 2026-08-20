@@ -22,6 +22,9 @@ split:
   embargo_days: 5
 
 model:
+  head: binary              # binary = P(outperform benchmark) | quantile = q10/50/90
+  static_input_dropout: 0.2 # anti-overfit: randomly mask sector/bank inputs in training
+  l1_static: 0.001          # anti-overfit: group-lasso zeroes unhelpful banks/flags
   use_momentum: true
   # f1 recent-deal perf | f2 break rate | f3 supply | m macro | p1 peers
   momentum_groups: [f1, f2, f3, m, p1]
@@ -31,6 +34,7 @@ model:
   dropout: 0.25
 
 train:
+  class_weight: balanced    # binary head: weight classes by the train base rate
   lr: 0.001
   weight_decay: 0.0001
   batch_size: 128

@@ -108,6 +108,78 @@ def evaluate(y: np.ndarray, q_pred: np.ndarray,
     return out
 
 
+def evaluate_binary(y: np.ndarray, p: np.ndarray) -> dict[str, float]:
+    """All metrics for one set of outperform-probability predictions.
+
+    y: (N,) realized CONTINUOUS outperformance (the label is y > 0)
+    p: (N,) predicted P(outperform)
+
+    Ordering metrics are computed against the continuous y — the probability
+    is a score, so rank IC / bucket spreads stay directly comparable to the
+    quantile model's numbers. Classification quality gets AUC (threshold-
+    free), Brier and log loss (proper scoring rules), and accuracy at 0.5.
+    """
+    y = np.asarray(y, dtype=float).ravel()
+    p = np.asarray(p, dtype=float).ravel()
+    if p.shape != y.shape:
+        raise ValueError(f"p shape {p.shape} does not match y {y.shape}")
+    ok = np.isfinite(y) & np.isfinite(p)
+    n_dropped = int((~ok).sum())
+    y, p = y[ok], p[ok]
+    label = (y > 0).astype(float)
+
+    out: dict[str, float] = {"n": float(len(y)), "n_dropped": float(n_dropped)}
+    out["base_rate"] = float(label.mean()) if len(y) else float("nan")
+
+    # ---- ordering vs the continuous outcome (comparable to quantile runs) ----
+    out["rank_ic"] = _spearman(p, y)
+    out["rank_ic_p"] = _spearman_p(p, y)
+    out["pearson_ic"] = _pearson(p, y)
+    out["decile_spread"] = bucket_spread(p, y, 10)
+    out["quintile_spread"] = bucket_spread(p, y, 5)
+    out["top_bucket_mean"] = _bucket_stat(p, y, 5, top=True, stat=np.mean)
+    out["bottom_bucket_mean"] = _bucket_stat(p, y, 5, top=False, stat=np.mean)
+    out["top_bucket_median"] = _bucket_stat(p, y, 5, top=True, stat=np.median)
+    out["bottom_bucket_median"] = _bucket_stat(p, y, 5, top=False, stat=np.median)
+    out["median_spread"] = (out["top_bucket_median"] - out["bottom_bucket_median"]
+                            if np.isfinite(out["top_bucket_median"])
+                            and np.isfinite(out["bottom_bucket_median"])
+                            else float("nan"))
+
+    # ---- classification quality ----
+    out["auc"] = _auc(label, p)
+    if len(y):
+        eps = 1e-7
+        pc = np.clip(p, eps, 1 - eps)
+        out["brier"] = float(((p - label) ** 2).mean())
+        out["logloss"] = float(-(label * np.log(pc)
+                                 + (1 - label) * np.log(1 - pc)).mean())
+        out["accuracy"] = float(((p > 0.5) == (label > 0.5)).mean())
+        # Skill vs always predicting the base rate (Brier skill score).
+        base = out["base_rate"]
+        ref = base * (1 - base)
+        out["brier_skill"] = (1.0 - out["brier"] / ref if ref > 0
+                              else float("nan"))
+        out["hit_rate"] = out["accuracy"]   # legacy-name alias for reports
+        out["mean_p"] = float(p.mean())
+    else:
+        for k in ("brier", "logloss", "accuracy", "brier_skill", "hit_rate",
+                  "mean_p"):
+            out[k] = float("nan")
+    return out
+
+
+def _auc(label: np.ndarray, p: np.ndarray) -> float:
+    """ROC AUC via the rank-sum identity (no sklearn dependency).
+    Ties in p are handled by average ranks. nan if one class is absent."""
+    pos = label > 0.5
+    n_pos, n_neg = int(pos.sum()), int((~pos).sum())
+    if n_pos == 0 or n_neg == 0 or np.std(p) == 0:
+        return float("nan")
+    ranks = stats.rankdata(p)
+    return float((ranks[pos].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg))
+
+
 def _interval_metrics(y: np.ndarray, q_pred: np.ndarray,
                       qs: list[float]) -> dict[str, float]:
     if not len(y):
@@ -261,7 +333,10 @@ def ic_by_period(y: np.ndarray, q_pred: np.ndarray, dates: np.ndarray,
     freq: pandas offset alias — "ME" monthly, "QE" quarterly, "YE" annual.
     """
     qs = sorted(quantiles)
-    point = np.asarray(q_pred, dtype=float)[:, qs.index(0.5)]
+    q_pred = np.atleast_2d(np.asarray(q_pred, dtype=float))
+    # A single-column matrix is a probability/point score (binary head);
+    # otherwise take the median column of the quantile matrix.
+    point = q_pred[:, 0] if q_pred.shape[1] == 1 else q_pred[:, qs.index(0.5)]
     df = pd.DataFrame({"date": pd.to_datetime(dates), "y": np.asarray(y, float),
                        "point": point})
     rows = []

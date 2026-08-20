@@ -74,6 +74,9 @@ def run(cfg: Config, fs: FeatureSet, features: str = "engineered",
         max_train: int = DEFAULT_MAX_TRAIN, device: str = "auto",
         n_estimators: int = 4, seed: int = 0,
         verbose: bool = True) -> RunResult:
+    if cfg.model.head == "binary":
+        raise ValueError("the TabPFN rung is an interval model — run it "
+                         "with model.head: quantile")
 
     def predict_quantiles(X_train: pd.DataFrame, y_train: np.ndarray,
                           X_val: pd.DataFrame, y_val: np.ndarray,

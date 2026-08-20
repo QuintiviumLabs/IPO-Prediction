@@ -38,7 +38,8 @@ f3 — Rolling supply: same-market deal count, log proceeds, IPO count (90d),
 m  — Macro block:
   from market.csv (per-market benchmark): m_geo_mom_63d, m_geo_dd_252,
     m_geo_rvol_21d;
-  from gpr.csv: m_gpr_mean63, m_gpr_vol63 (SD of daily changes, annualized);
+  from gpr.csv: m_gpr_vol63 (SD of daily changes, annualized — the level
+    itself is deliberately NOT an input; the GPR arm covers level dynamics);
   from macro.csv (date, market, vol_index, fx — optional file/columns):
     m_vol_index_z (252d rolling z), m_fx_ret_21d;
   from macro_global.csv (date, vix, hy_oas, em, acwi — optional):
@@ -460,7 +461,7 @@ def build_features(raw: RawData, cfg: DataConfig,
         f2_names += [f"f2_break_{t}", f"f2_depth_{t}"]
     f3_names = ["f3_cnt_3m", "f3_prc_3m", "f3_ipo_cnt_3m", "f3_accel"]
     m_names = ["m_geo_mom_63d", "m_geo_dd_252", "m_geo_rvol_21d",
-               "m_gpr_mean63", "m_gpr_vol63",
+               "m_gpr_vol63",
                "m_regime_hot", "m_regime_cold"]
     if "vol_index" in macro_cols:
         m_names.append("m_vol_index_z")
@@ -567,10 +568,8 @@ def build_features(raw: RawData, cfg: DataConfig,
         gi = _asof_idx(gpr_dates, t0)
         if gi >= 62:
             gwin = gpr_vals[gi - 62: gi + 1]
-            vals["m_gpr_mean63"] = float(gwin.mean())
             vals["m_gpr_vol63"] = float(np.diff(gwin).std() * np.sqrt(252))
         else:
-            vals["m_gpr_mean63"] = float(gpr_vals[: gi + 1].mean()) if gi >= 0 else 0.0
             vals["m_gpr_vol63"] = 0.0
 
         # regime: mean pop of the prior `regime_pop_window` same-market IPOs

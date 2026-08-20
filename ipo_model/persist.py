@@ -80,11 +80,15 @@ class Bundle:
 
     def predict(self, fs: FeatureSet,
                 idx: np.ndarray | None = None) -> dict[int, np.ndarray]:
-        """Ensemble quantile forecasts, horizon -> (n, Q) in return space.
+        """Ensemble forecasts per horizon.
+
+        head='quantile': (n, Q) quantile matrix in return space.
+        head='binary':   (n, 1) probability of outperforming the benchmark.
 
         The FeatureSet must be built from the SAME data schema the bundle was
         trained on (checked against stored feature names)."""
         self._check_schema(fs)
+        binary = self.cfg.model.head == "binary"
         device = self.cfg.train.device
         tensors = _tensors(fs, self.scaler, self.cfg, device)
         if idx is not None:
@@ -93,8 +97,14 @@ class Bundle:
         with torch.no_grad():
             per_model = [m(tensors) for m in self._models(tensors)]
         for h in sorted(self.cfg.data.horizons):
-            q = np.mean([p[h].cpu().numpy() for p in per_model], axis=0)
-            if self.transform is not None:
+            if binary:
+                q = np.mean([torch.sigmoid(p[h]).cpu().numpy()
+                             for p in per_model], axis=0)
+            else:
+                q = np.mean([p[h].cpu().numpy() for p in per_model], axis=0)
+            if q.ndim == 1:
+                q = q[:, None]
+            if self.transform is not None and not binary:
                 q = self.transform[h].inverse(q)
             out[h] = q
         return out
@@ -187,7 +197,13 @@ def fit_final(cfg: Config, fs: FeatureSet, out: str | Path,
     tensors = _tensors(fs, scaler, cfg, device)
 
     transform = None
-    if cfg.train.label_transform == "normal_score":
+    if cfg.model.head == "binary":
+        if cfg.train.label_transform != "none":
+            raise ValueError("label_transform has no meaning with "
+                             "head='binary'; set train.label_transform: none")
+        targets = {h: torch.tensor((y > 0).astype(np.float32), device=device)
+                   for h, y in fs.y.items()}
+    elif cfg.train.label_transform == "normal_score":
         transform = {h: NormalScore().fit(y[train_idx]) for h, y in fs.y.items()}
         targets = {h: torch.tensor(transform[h].transform(y),
                                    dtype=torch.float32, device=device)

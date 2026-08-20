@@ -74,17 +74,26 @@ def deep_permutation_importance(cfg: Config, fs: FeatureSet, n_repeats: int = 3,
     groups = _feature_groups(cfg, fs)
     deltas: dict[str, list[float]] = {n: [] for n in groups}
 
+    binary = cfg.model.head == "binary"
+
+    def _ic(y_true: np.ndarray, out: torch.Tensor) -> float:
+        arr = out.cpu().numpy()
+        if binary:
+            from ipo_model.training.metrics import evaluate_binary
+            return evaluate_binary(y_true, arr.ravel())["rank_ic"]
+        return evaluate(y_true, arr, cfg.model.quantiles)["rank_ic"]
+
     for k, fold in enumerate(folds):
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
         tensors = _tensors(fs, scaler, cfg, device)
-        targets = {h: torch.tensor(y, dtype=torch.float32, device=device)
+        targets = {h: torch.tensor((y > 0).astype(np.float32) if binary else y,
+                                   dtype=torch.float32, device=device)
                    for h, y in fs.y.items()}
         model, _ = train_one(cfg, tensors, targets, fold, seed)
         test_t = _slice(tensors, fold.test_idx)
         y_test = fs.y[main_h][fold.test_idx]
         with torch.no_grad():
-            base = evaluate(y_test, model(test_t)[main_h].cpu().numpy(),
-                            cfg.model.quantiles)["rank_ic"]
+            base = _ic(y_test, model(test_t)[main_h])
         gen = torch.Generator().manual_seed(seed + 1000 + k)
         for name, (key, cols) in groups.items():
             ics = []
@@ -92,8 +101,7 @@ def deep_permutation_importance(cfg: Config, fs: FeatureSet, n_repeats: int = 3,
                 perm = torch.randperm(len(fold.test_idx), generator=gen)
                 with torch.no_grad():
                     q = model(_permute(test_t, key, cols, perm))[main_h]
-                ics.append(evaluate(y_test, q.cpu().numpy(),
-                                    cfg.model.quantiles)["rank_ic"])
+                ics.append(_ic(y_test, q))
             deltas[name].append(base - float(np.mean(ics)))
         if verbose:
             print(f"  fold {k}: base IC {base:+.3f}, {len(groups)} features permuted")
@@ -112,12 +120,17 @@ def tree_gain_importance(cfg: Config, fs: FeatureSet, seed: int = 0) -> pd.DataF
 
     folds = purged_walk_forward(fs.dates, fs.label_end, cfg.split)
     y = fs.y[cfg.main_horizon]
+    params = dict(cfg.lgbm.params, seed=seed)
+    if cfg.model.head == "binary":
+        y = (y > 0).astype(float)
+        params.update({"objective": "binary", "metric": "binary_logloss"})
+        params.pop("alpha", None)
     shares = []
     for fold in folds:
         scaler = FoldScaler.fit(fs, fold.train_idx, cfg.data)
         X = engineered_table(fs, scaler)
         booster = lgb.train(
-            dict(cfg.lgbm.params, seed=seed),
+            params,
             lgb.Dataset(X.iloc[fold.train_idx], label=y[fold.train_idx]),
             num_boost_round=cfg.lgbm.num_boost_round,
             valid_sets=[lgb.Dataset(X.iloc[fold.val_idx], label=y[fold.val_idx])],
@@ -190,12 +203,25 @@ def _slices(cfg: Config, fs: FeatureSet, idx: np.ndarray, q: np.ndarray,
         slices["momentum=drought(n=0)"] = n_deals == 0
         slices["momentum=active(n>0)"] = n_deals > 0
 
+    q = np.atleast_2d(np.asarray(q, float))
+    binary = q.shape[1] == 1          # probability score (binary head)
     rows = []
     for name, mask in slices.items():
         if mask.sum() < 20:
             continue
-        m = evaluate(y[mask], q[mask], quantiles)
-        rows.append({"slice": name, "n": int(mask.sum()), "rank_ic": m["rank_ic"],
-                     "quintile_spread": m["quintile_spread"], "mae": m["mae"],
-                     "coverage": m["coverage"], "coverage_error": m["coverage_error"]})
+        if binary:
+            from ipo_model.training.metrics import evaluate_binary
+            m = evaluate_binary(y[mask], q[mask, 0])
+            rows.append({"slice": name, "n": int(mask.sum()),
+                         "rank_ic": m["rank_ic"],
+                         "quintile_spread": m["quintile_spread"],
+                         "auc": m["auc"], "brier": m["brier"],
+                         "base_rate": m["base_rate"]})
+        else:
+            m = evaluate(y[mask], q[mask], quantiles)
+            rows.append({"slice": name, "n": int(mask.sum()),
+                         "rank_ic": m["rank_ic"],
+                         "quintile_spread": m["quintile_spread"], "mae": m["mae"],
+                         "coverage": m["coverage"],
+                         "coverage_error": m["coverage_error"]})
     return pd.DataFrame(rows)

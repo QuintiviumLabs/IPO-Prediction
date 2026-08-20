@@ -31,10 +31,19 @@ def test_deep_permutation_importance(fs, cfg):
     assert "gpr" in names and "bookrunners" in names and "f1_med_1d" in names
 
 
-def test_slice_metrics(fs, cfg):
+def test_slice_metrics_binary(fs, cfg):
     fast = _fast_cfg(cfg)
     res = loop.run(fast, fs, verbose=False)
     df = diagnostics.slice_metrics(fast, fs, res)
     assert (df["n"] >= 20).all()
-    assert np.isfinite(df["mae"]).all()
+    assert np.isfinite(df["brier"]).all()
+    assert "auc" in df.columns
     assert any(s.startswith("market=") for s in df["slice"])
+
+
+def test_slice_metrics_quantile(fs, cfg):
+    fast = _fast_cfg(cfg).override(**{"model.head": "quantile"})
+    res = loop.run(fast, fs, verbose=False)
+    df = diagnostics.slice_metrics(fast, fs, res)
+    assert np.isfinite(df["mae"]).all()
+    assert "coverage" in df.columns

@@ -35,8 +35,10 @@ def main() -> None:
         cfg = cfg.override(**overrides)
 
     fs = build_features(load_raw(args.data), cfg.data)
-    print(f"{len(fs)} IPOs; target = {cfg.main_horizon}d excess log return from offer; "
-          f"seeds={cfg.train.seeds}")
+    target = (f"P(outperform benchmark over {cfg.main_horizon}d)"
+              if cfg.model.head == "binary"
+              else f"{cfg.main_horizon}d excess log return from offer")
+    print(f"{len(fs)} IPOs; target = {target}; seeds={cfg.train.seeds}")
     res = loop.run(cfg, fs)
     print("\nAcross folds (mean ± std) | pooled OOS:")
     for k, (mu, sd) in res.summary.items():

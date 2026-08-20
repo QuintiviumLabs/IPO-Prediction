@@ -31,6 +31,11 @@ def main() -> None:
 
     df = load_predictions(args.rung, args.results)
     _, levels = quantile_columns(df)
+    if len(levels) < 2:
+        raise SystemExit(
+            f"{args.rung} holds binary-head probabilities (p_out), not "
+            "quantile intervals — nothing to conformally calibrate. Train a "
+            "quantile run (model.head: quantile) for interval work.")
     cal_df, rep = calibrate(df, levels, mode=args.mode, min_cal=args.min_cal,
                             window=args.window)
 

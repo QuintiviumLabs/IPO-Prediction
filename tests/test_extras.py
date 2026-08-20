@@ -12,7 +12,9 @@ sklearn = pytest.importorskip("sklearn")
 
 
 def _fast_cfg(cfg):
-    return cfg.override(**{"split.n_folds": 2, "train.seeds": (0,)})
+    # Extras are interval models: they run under the quantile head only.
+    return cfg.override(**{"split.n_folds": 2, "train.seeds": (0,),
+                           "model.head": "quantile"})
 
 
 # ---------------------------------------------------------------- linear ---
@@ -39,7 +41,8 @@ def test_linear_lasso_selects_features(fs, cfg):
 
 def test_linear_quantreg_gives_varying_widths(fs, cfg):
     from ipo_model.extras import linear
-    small = cfg.override(**{"split.n_folds": 2, "split.min_train_frac": 0.6})
+    small = cfg.override(**{"split.n_folds": 2, "split.min_train_frac": 0.6,
+                            "model.head": "quantile"})
     res = linear.run(small, fs, model="ridge", quantile_method="quantreg",
                      verbose=False)
     widths = np.concatenate([r.q_pred[:, -1] - r.q_pred[:, 0]

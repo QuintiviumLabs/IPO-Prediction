@@ -61,6 +61,7 @@ def test_label_transform_end_to_end(fs, cfg):
     from ipo_model.training import loop
     fast = cfg.override(**{"split.n_folds": 2, "train.max_epochs": 3,
                            "train.patience": 2, "train.seeds": (0,),
+                           "model.head": "quantile",
                            "train.label_transform": "normal_score"})
     res = loop.run(fast, fs, verbose=False)
     for r in res.fold_results:

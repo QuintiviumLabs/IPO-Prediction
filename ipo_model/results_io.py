@@ -6,7 +6,10 @@ invented later — period IC t-tests, bootstrap intervals, paired comparisons
 against a baseline — can run on a training job that already finished.
 
 One row per (deal, rung):
-    ipo_id, date, market, fold, y_true, q0.1, q0.5, q0.9
+    quantile head:  ipo_id, date, market, fold, y_true, q0.1, q0.5, q0.9
+    binary head:    ipo_id, date, market, fold, y_true, p_out
+(p_out = predicted probability of outperforming the benchmark; downstream
+rank/IC analyses treat it as the point score.)
 """
 from __future__ import annotations
 
@@ -37,8 +40,12 @@ def predictions_frame(cfg: Config, fs: FeatureSet, res: RunResult) -> pd.DataFra
             "fold": r.fold,
             "y_true": fs.y[cfg.main_horizon][idx],
         }
-        for j, q in enumerate(qs):
-            block[f"q{q:g}"] = r.q_pred[:, j]
+        pred = np.atleast_2d(r.q_pred)
+        if pred.shape[1] == 1:          # binary head: probability score
+            block["p_out"] = pred[:, 0]
+        else:
+            for j, q in enumerate(qs):
+                block[f"q{q:g}"] = pred[:, j]
         frames.append(pd.DataFrame(block))
     out = pd.concat(frames, ignore_index=True)
     return out.sort_values("date", kind="stable").reset_index(drop=True)
@@ -69,10 +76,16 @@ def available_rungs(out_dir: str | Path = "results") -> list[str]:
 
 
 def quantile_columns(df: pd.DataFrame) -> tuple[np.ndarray, tuple[float, ...]]:
-    """Extract the (N, Q) quantile matrix and its levels from a saved frame."""
+    """Extract the (N, Q) quantile matrix and its levels from a saved frame.
+
+    Binary-head frames have a single p_out probability column instead; it is
+    returned as a (N, 1) matrix with level (0.5,) so rank/point analyses work
+    unchanged. Interval analyses should check len(levels) > 1 first."""
     cols = sorted((c for c in df.columns if c.startswith("q") and c != "q"),
                   key=lambda c: float(c[1:]))
     if not cols:
+        if "p_out" in df.columns:
+            return df[["p_out"]].to_numpy(float), (0.5,)
         raise ValueError(f"no quantile columns found in {list(df.columns)}")
     levels = tuple(float(c[1:]) for c in cols)
     return df[cols].to_numpy(float), levels
